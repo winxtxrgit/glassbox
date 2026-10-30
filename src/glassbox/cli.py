@@ -1,18 +1,27 @@
-"""Command line: ``glassbox triage <file>`` and ``glassbox demo``.
+"""Command line: ``glassbox triage``, ``glassbox probe``, ``glassbox demo``.
 
-``triage`` runs a real local model (Ollama + Qwen by default). ``demo`` runs a
-built-in example through a canned backend so you can see the whole idea — a
-verdict, its located evidence, and a *caught* fabricated citation — without
-installing a model first.
+``triage`` classifies a document and grounds its evidence (phase 1). ``probe``
+goes further (phase 2): it erases each cited span and re-decides, revealing which
+evidence actually drives the verdict and which is decoration. Both run a real
+local model (Ollama + Qwen by default). ``demo`` and ``probe --demo`` run built-in
+examples through canned backends so you can see each idea with no model installed.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from . import __version__
-from .backends import DEFAULT_MODEL, BackendError, OllamaBackend, StubBackend
+from .backends import (
+    DEFAULT_MODEL,
+    BackendError,
+    CallableBackend,
+    OllamaBackend,
+    StubBackend,
+)
+from .faithfulness import FaithfulnessReport, analyze
 from .prompts import DEFAULT_POLICY
 from .schema import Verdict
 from .triage import TriageError, triage
@@ -39,6 +48,36 @@ _DEMO_REPLY = """\
   ]
 }"""
 
+# For `probe --demo`: a document and a toy model whose decision depends ONLY on
+# the credential phrase, yet which cites a second, harmless phrase too. The
+# counterfactual check exposes the difference — one citation is load-bearing,
+# the other is decoration.
+_PROBE_DEMO_DOCUMENT = (
+    "Your mailbox is over quota. Verify your password within 24 hours to avoid suspension."
+)
+_PROBE_DEMO_TRIGGER = "Verify your password"
+_PROBE_DEMO_CANDIDATES = ("Verify your password", "mailbox is over quota")
+
+
+def _probe_demo_model(system: str, user: str) -> str:
+    """A stand-in model: 'suspicious' iff the credential phrase is still present.
+
+    It cites whichever candidate phrases currently appear in the document — so
+    once the credential phrase is erased it both flips its label and drops that
+    citation, exactly as a faithful (if simplistic) model would.
+    """
+    document = user.split("DOCUMENT:\n", 1)[-1]
+    suspicious = _PROBE_DEMO_TRIGGER in document
+    evidence = [phrase for phrase in _PROBE_DEMO_CANDIDATES if phrase in document]
+    return json.dumps(
+        {
+            "label": "suspicious" if suspicious else "benign",
+            "confidence": 0.9 if suspicious else 0.3,
+            "rationale": "toy keyword model",
+            "evidence": evidence,
+        }
+    )
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -56,6 +95,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ollama model tag (default: %(default)s)",
     )
     t.add_argument(
+        "--host",
+        default="http://localhost:11434",
+        help="Ollama server URL (default: %(default)s)",
+    )
+
+    p = sub.add_parser(
+        "probe",
+        help="counterfactual faithfulness: erase each cited span and re-decide",
+    )
+    p.add_argument("file", nargs="?", help="document to probe (omit with --demo)")
+    p.add_argument(
+        "--demo",
+        action="store_true",
+        help="run a built-in toy model instead of Ollama — no model needed",
+    )
+    p.add_argument("--model", default=DEFAULT_MODEL, help="Ollama model tag (default: %(default)s)")
+    p.add_argument(
         "--host",
         default="http://localhost:11434",
         help="Ollama server URL (default: %(default)s)",
@@ -122,9 +178,73 @@ def _cmd_demo(_args) -> int:
     return 0
 
 
+def _render_faithfulness(report: FaithfulnessReport) -> str:
+    v = report.verdict
+    lines = [
+        f"verdict:    {v.label} (confidence {v.confidence:.2f})",
+        "",
+        "evidence faithfulness (erase each cited span, then re-decide):",
+    ]
+    if not report.testable:
+        lines.append("  (no grounded evidence to test)")
+    for probe in report.probes:
+        if probe.flipped:
+            tag = "load-bearing"
+            effect = f"removing it flips the verdict to '{probe.new_label}'"
+        else:
+            tag = "decorative  "
+            effect = f"verdict holds at '{v.label}' without it"
+        lines.append(f"  [{tag}] {probe.citation.quote!r}")
+        lines.append(f"               -> {effect}")
+
+    lines.append("")
+    if not report.testable:
+        lines.append("faithful:   UNTESTABLE - the verdict cited nothing that exists.")
+    elif report.load_bearing:
+        lines.append(
+            "faithful:   YES - erasing all cited evidence flips the verdict to "
+            f"'{report.comprehensive_label}'. The decision depends on what it cited."
+        )
+    else:
+        lines.append(
+            "faithful:   NO - the verdict survives with all cited evidence erased. "
+            "Its stated reasons are post-hoc, not load-bearing."
+        )
+    return "\n".join(lines)
+
+
+def _cmd_probe(args) -> int:
+    if args.demo:
+        document = _PROBE_DEMO_DOCUMENT
+        backend = CallableBackend(_probe_demo_model)
+    elif args.file:
+        try:
+            with open(args.file, encoding="utf-8") as handle:
+                document = handle.read()
+        except OSError as error:
+            print(f"glassbox: {error}", file=sys.stderr)
+            return 2
+        backend = OllamaBackend(model=args.model, host=args.host)
+    else:
+        print("glassbox: give a file to probe, or pass --demo", file=sys.stderr)
+        return 2
+
+    if args.demo:
+        print("Document:\n" + document + "\n")
+    try:
+        report = analyze(document, backend, DEFAULT_POLICY)
+    except (BackendError, TriageError) as error:
+        print(f"glassbox: {error}", file=sys.stderr)
+        return 2
+
+    print(_render_faithfulness(report))
+    return 0 if report.load_bearing else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return {"triage": _cmd_triage, "demo": _cmd_demo}[args.command](args)
+    handlers = {"triage": _cmd_triage, "probe": _cmd_probe, "demo": _cmd_demo}
+    return handlers[args.command](args)
 
 
 if __name__ == "__main__":

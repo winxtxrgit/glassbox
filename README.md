@@ -55,6 +55,28 @@ glassbox triage report.txt --model qwen3:4b --host http://localhost:11434
 
 Exit code is `0` when the verdict is grounded, `1` when it isn't — so you can gate a pipeline on *faithfulness*, not just on the label.
 
+## Does the verdict actually depend on its evidence?
+
+Citing real text isn't the same as reasoning from it. `glassbox probe` runs the **counterfactual** test: it erases each cited span, re-decides, and checks whether the verdict actually moves. Evidence whose removal flips the label is load-bearing; evidence the verdict survives without is decoration.
+
+```bash
+glassbox probe --demo          # a toy model, no install needed
+```
+
+```
+verdict:    suspicious (confidence 0.90)
+
+evidence faithfulness (erase each cited span, then re-decide):
+  [load-bearing] 'Verify your password'
+               -> removing it flips the verdict to 'benign'
+  [decorative  ] 'mailbox is over quota'
+               -> verdict holds at 'suspicious' without it
+
+faithful:   YES - erasing all cited evidence flips the verdict to 'benign'.
+```
+
+Run it for real with `glassbox probe email.txt`. A model that keeps its verdict no matter which cited span you erase is rationalizing, not explaining — and `probe` says so (`faithful: NO`, exit code `1`). This is the erasure idea from rationale-faithfulness research (ERASER's *comprehensiveness*), applied to a black-box model through its own output.
+
 ## How it works
 
 ```
@@ -74,10 +96,10 @@ Zero third-party dependencies — the Ollama backend speaks plain HTTP from the 
 
 ## Roadmap
 
-This is phase 1 of a longer build toward **behavioural interpretability of black-box LLMs**:
+A longer build toward **behavioural interpretability of black-box LLMs**:
 
-- **✅ Grounding** — does the cited evidence exist? *(you are here)*
-- **Counterfactual faithfulness** — delete the cited span; does the verdict actually flip? If not, the citation wasn't load-bearing.
+- **✅ Grounding** — does the cited evidence exist? (`glassbox triage`)
+- **✅ Counterfactual faithfulness** — erase the cited span; does the verdict actually flip? If not, the citation wasn't load-bearing. (`glassbox probe`) *(you are here)*
 - **Consistency** — paraphrase the document; does the decision hold?
 - **Calibration** — do the confidence numbers mean anything across a labelled set?
 - **White-box side-quest** — because the weights are local, open the model up: attention and logit-lens views of *where* the signal is read, connected back to the black-box findings.

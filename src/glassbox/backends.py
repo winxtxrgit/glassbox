@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from typing import Protocol
 
 # Small enough to sit on a 4 GB GPU, capable enough to follow the JSON contract.
@@ -38,6 +39,21 @@ class StubBackend:
 
     def generate(self, system: str, user: str) -> str:
         return self._response
+
+
+class CallableBackend:
+    """A backend backed by a function ``(system, user) -> str``.
+
+    Unlike :class:`StubBackend` the reply can depend on the prompt, which is what
+    the counterfactual tests need: they stand in a toy model whose decision
+    actually changes when evidence is removed from the document.
+    """
+
+    def __init__(self, fn: Callable[[str, str], str]) -> None:
+        self._fn = fn
+
+    def generate(self, system: str, user: str) -> str:
+        return self._fn(system, user)
 
 
 class OllamaBackend:

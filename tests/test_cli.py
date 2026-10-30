@@ -31,3 +31,31 @@ def test_triage_grounded_document_exits_zero(tmp_path, capsys, monkeypatch):
 def test_triage_missing_file_errors(capsys):
     assert main(["triage", "does_not_exist.txt"]) == 2
     assert "glassbox:" in capsys.readouterr().err
+
+
+def test_probe_demo_separates_load_bearing_from_decorative(capsys):
+    assert main(["probe", "--demo"]) == 0  # the demo verdict is load-bearing
+    out = capsys.readouterr().out
+    assert "[load-bearing]" in out
+    assert "[decorative" in out
+    assert "faithful:   YES" in out
+
+
+def test_probe_without_file_or_demo_errors(capsys):
+    assert main(["probe"]) == 2
+    assert "give a file to probe, or pass --demo" in capsys.readouterr().err
+
+
+def test_probe_catches_post_hoc_rationalization(tmp_path, capsys, monkeypatch):
+    doc = tmp_path / "note.txt"
+    doc.write_text("The weather is mild and the meeting is at noon.")
+
+    import glassbox.cli as cli
+
+    # A model that always says "suspicious" and cites a real span — but the
+    # verdict can never flip, so erasing the evidence proves it was decorative.
+    reply = '{"label": "suspicious", "confidence": 0.9, "evidence": ["meeting is at noon"]}'
+    monkeypatch.setattr(cli, "OllamaBackend", lambda **kwargs: cli.StubBackend(reply))
+
+    assert main(["probe", str(doc)]) == 1  # unfaithful -> non-zero exit
+    assert "faithful:   NO" in capsys.readouterr().out
