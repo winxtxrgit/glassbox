@@ -1,10 +1,11 @@
-"""Command line: ``glassbox triage``, ``glassbox probe``, ``glassbox demo``.
+"""Command line: ``triage``, ``probe``, ``stress``, ``demo``.
 
 ``triage`` classifies a document and grounds its evidence (phase 1). ``probe``
-goes further (phase 2): it erases each cited span and re-decides, revealing which
-evidence actually drives the verdict and which is decoration. Both run a real
-local model (Ollama + Qwen by default). ``demo`` and ``probe --demo`` run built-in
-examples through canned backends so you can see each idea with no model installed.
+erases each cited span and re-decides, revealing which evidence drives the verdict
+and which is decoration (phase 2). ``stress`` re-decides after meaning-preserving
+edits, exposing a verdict that tracks surface form rather than meaning (phase 3).
+The first three run a real local model (Ollama + Qwen by default); ``demo`` and
+the ``--demo`` flags run built-in examples through canned backends, no model needed.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from .backends import (
     OllamaBackend,
     StubBackend,
 )
+from .consistency import ConsistencyReport, check
 from .faithfulness import FaithfulnessReport, analyze
 from .prompts import DEFAULT_POLICY
 from .schema import Verdict
@@ -112,6 +114,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--model", default=DEFAULT_MODEL, help="Ollama model tag (default: %(default)s)")
     p.add_argument(
+        "--host",
+        default="http://localhost:11434",
+        help="Ollama server URL (default: %(default)s)",
+    )
+
+    s = sub.add_parser(
+        "stress",
+        help="consistency: re-decide after meaning-preserving edits",
+    )
+    s.add_argument("file", nargs="?", help="document to stress-test (omit with --demo)")
+    s.add_argument(
+        "--demo",
+        action="store_true",
+        help="run a built-in toy model instead of Ollama — no model needed",
+    )
+    s.add_argument("--model", default=DEFAULT_MODEL, help="Ollama model tag (default: %(default)s)")
+    s.add_argument(
         "--host",
         default="http://localhost:11434",
         help="Ollama server URL (default: %(default)s)",
@@ -241,9 +260,78 @@ def _cmd_probe(args) -> int:
     return 0 if report.load_bearing else 1
 
 
+def _render_consistency(report: ConsistencyReport) -> str:
+    v = report.original
+    lines = [
+        f"verdict:    {v.label} (confidence {v.confidence:.2f})",
+        "",
+        "consistency (re-decide after meaning-preserving edits):",
+    ]
+    for variant in report.effective:
+        if variant.agreed:
+            lines.append(f"  [stable] {variant.perturbation.name:<22} -> still '{variant.label}'")
+        else:
+            lines.append(
+                f"  [FLIP  ] {variant.perturbation.name:<22} -> changes to '{variant.label}'"
+            )
+    skipped = [var.perturbation.name for var in report.variants if not var.changed]
+    if skipped:
+        lines.append(f"  (no change to this document: {', '.join(skipped)})")
+
+    lines.append("")
+    if not report.testable:
+        lines.append("robust:     UNTESTABLE - no edit changed this document.")
+    elif report.robust:
+        n = len(report.effective)
+        lines.append(
+            f"robust:     YES - the verdict held under all {n} meaning-preserving edit(s)."
+        )
+    else:
+        n = len(report.flips)
+        total = len(report.effective)
+        lines.append(
+            f"robust:     NO - {n} of {total} edit(s) flipped the verdict. The decision "
+            "tracks surface form, not meaning."
+        )
+    return "\n".join(lines)
+
+
+def _cmd_stress(args) -> int:
+    if args.demo:
+        document = _PROBE_DEMO_DOCUMENT
+        backend = CallableBackend(_probe_demo_model)
+    elif args.file:
+        try:
+            with open(args.file, encoding="utf-8") as handle:
+                document = handle.read()
+        except OSError as error:
+            print(f"glassbox: {error}", file=sys.stderr)
+            return 2
+        backend = OllamaBackend(model=args.model, host=args.host)
+    else:
+        print("glassbox: give a file to stress-test, or pass --demo", file=sys.stderr)
+        return 2
+
+    if args.demo:
+        print("Document:\n" + document + "\n")
+    try:
+        report = check(document, backend, DEFAULT_POLICY)
+    except (BackendError, TriageError) as error:
+        print(f"glassbox: {error}", file=sys.stderr)
+        return 2
+
+    print(_render_consistency(report))
+    return 0 if report.robust else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    handlers = {"triage": _cmd_triage, "probe": _cmd_probe, "demo": _cmd_demo}
+    handlers = {
+        "triage": _cmd_triage,
+        "probe": _cmd_probe,
+        "stress": _cmd_stress,
+        "demo": _cmd_demo,
+    }
     return handlers[args.command](args)
 
 

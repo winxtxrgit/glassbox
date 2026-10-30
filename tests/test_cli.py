@@ -59,3 +59,16 @@ def test_probe_catches_post_hoc_rationalization(tmp_path, capsys, monkeypatch):
 
     assert main(["probe", str(doc)]) == 1  # unfaithful -> non-zero exit
     assert "faithful:   NO" in capsys.readouterr().out
+
+
+def test_stress_demo_detects_surface_sensitivity(capsys):
+    assert main(["stress", "--demo"]) == 1  # the toy model is case-brittle
+    out = capsys.readouterr().out
+    assert "[FLIP  ]" in out
+    assert "lowercase" in out
+    assert "robust:     NO" in out
+
+
+def test_stress_without_file_or_demo_errors(capsys):
+    assert main(["stress"]) == 2
+    assert "give a file to stress-test, or pass --demo" in capsys.readouterr().err

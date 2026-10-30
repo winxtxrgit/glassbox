@@ -77,6 +77,27 @@ faithful:   YES - erasing all cited evidence flips the verdict to 'benign'.
 
 Run it for real with `glassbox probe email.txt`. A model that keeps its verdict no matter which cited span you erase is rationalizing, not explaining — and `probe` says so (`faithful: NO`, exit code `1`). This is the erasure idea from rationale-faithfulness research (ERASER's *comprehensiveness*), applied to a black-box model through its own output.
 
+## Does the verdict track meaning, or surface form?
+
+A model that understands the content shouldn't change its mind when you reword the document without changing what it means. `glassbox stress` re-decides after **meaning-preserving edits** — lower-casing, whitespace reflow, a forwarding header, ASCII-normalized punctuation — and flags any edit that flips the label.
+
+```bash
+glassbox stress --demo
+```
+
+```
+verdict:    suspicious (confidence 0.90)
+
+consistency (re-decide after meaning-preserving edits):
+  [FLIP  ] lowercase              -> changes to 'benign'
+  [stable] pad boilerplate        -> still 'suspicious'
+  (no change to this document: collapse whitespace, normalize punctuation)
+
+robust:     NO - 1 of 2 edit(s) flipped the verdict. The decision tracks surface form, not meaning.
+```
+
+Here the toy model was reading letter case, not content — so lower-casing alone broke it. A verdict that survives every edit is robust (exit `0`); one that flips is fragile (exit `1`). No-op edits don't count toward the score.
+
 ## How it works
 
 ```
@@ -99,8 +120,8 @@ Zero third-party dependencies — the Ollama backend speaks plain HTTP from the 
 A longer build toward **behavioural interpretability of black-box LLMs**:
 
 - **✅ Grounding** — does the cited evidence exist? (`glassbox triage`)
-- **✅ Counterfactual faithfulness** — erase the cited span; does the verdict actually flip? If not, the citation wasn't load-bearing. (`glassbox probe`) *(you are here)*
-- **Consistency** — paraphrase the document; does the decision hold?
+- **✅ Counterfactual faithfulness** — erase the cited span; does the verdict actually flip? If not, the citation wasn't load-bearing. (`glassbox probe`)
+- **✅ Consistency** — reword the document meaning-for-meaning; does the decision hold? (`glassbox stress`) *(you are here)*
 - **Calibration** — do the confidence numbers mean anything across a labelled set?
 - **White-box side-quest** — because the weights are local, open the model up: attention and logit-lens views of *where* the signal is read, connected back to the black-box findings.
 
