@@ -125,6 +125,37 @@ def test_audit_without_file_or_demo_errors(capsys):
     assert "give a file to audit, or pass --demo" in capsys.readouterr().err
 
 
+def test_audit_json_output_is_valid_and_machine_readable(capsys):
+    import json
+
+    assert main(["audit", "--demo", "--json"]) == 1
+    data = json.loads(capsys.readouterr().out)  # must be valid JSON, not text
+    assert data["grounded"] is True
+    assert data["robust"] is False
+    assert data["trustworthy"] is False
+
+
+def test_batch_demo_reports_pass_rates(capsys):
+    assert main(["batch", "--demo"]) == 1  # the toy model is never robust
+    out = capsys.readouterr().out
+    assert "grounded:" in out
+    assert "100%" in out  # grounded on all demo docs
+    assert "0%" in out  # robust on none
+
+
+def test_batch_without_corpus_or_demo_errors(capsys):
+    assert main(["batch"]) == 2
+    assert "give a corpus" in capsys.readouterr().err
+
+
+def test_free_api_backend_without_key_errors(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    doc = tmp_path / "d.txt"
+    doc.write_text("verify your password")
+    assert main(["triage", str(doc), "--backend", "openrouter"]) == 2
+    assert "set OPENROUTER_API_KEY" in capsys.readouterr().err
+
+
 def test_lens_without_extra_gives_install_hint(capsys, monkeypatch):
     import glassbox.cli as cli
 

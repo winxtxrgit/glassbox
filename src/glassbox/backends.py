@@ -20,6 +20,22 @@ from typing import Protocol
 DEFAULT_MODEL = "qwen2.5:3b"
 DEFAULT_HOST = "http://localhost:11434"
 
+# OpenAI-compatible providers with a free tier, for when you'd rather not run a
+# model locally. Each: (base URL, a sensible default model, the env var holding
+# the API key). OpenRouter's default is a free Qwen; Groq's is a fast free Llama.
+PROVIDERS: dict[str, tuple[str, str, str]] = {
+    "openrouter": (
+        "https://openrouter.ai/api/v1",
+        "qwen/qwen-2.5-72b-instruct:free",
+        "OPENROUTER_API_KEY",
+    ),
+    "groq": (
+        "https://api.groq.com/openai/v1",
+        "llama-3.3-70b-versatile",
+        "GROQ_API_KEY",
+    ),
+}
+
 
 class BackendError(RuntimeError):
     """The backend could not produce a response (unreachable, timeout, bad reply)."""
@@ -106,3 +122,53 @@ class OllamaBackend:
             return body["message"]["content"]
         except (KeyError, TypeError) as error:
             raise BackendError(f"unexpected Ollama response shape: {error}") from None
+
+
+class OpenAICompatBackend:
+    """Generate via any OpenAI-compatible ``/chat/completions`` endpoint.
+
+    Works with Groq, OpenRouter, Together, and friends — anything that speaks the
+    OpenAI chat API. Requests JSON-object output and greedy decoding. The API key
+    is read from the caller (typically an environment variable the user set); this
+    class never prompts for or stores it beyond the instance.
+    """
+
+    def __init__(self, base_url: str, model: str, api_key: str, timeout: float = 120.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key = api_key
+        self.timeout = timeout
+
+    def generate(self, system: str, user: str) -> str:
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
+        }
+        request = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                body = json.loads(response.read().decode())
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode(errors="replace")[:200]
+            raise BackendError(f"{self.base_url} returned HTTP {error.code}: {detail}") from None
+        except urllib.error.URLError as error:
+            raise BackendError(f"cannot reach {self.base_url}: {error}") from None
+        except (OSError, json.JSONDecodeError) as error:
+            raise BackendError(f"unreadable reply from {self.base_url}: {error}") from None
+
+        try:
+            return body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as error:
+            raise BackendError(f"unexpected response shape from {self.base_url}: {error}") from None

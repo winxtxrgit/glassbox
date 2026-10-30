@@ -75,6 +75,38 @@ glassbox triage report.txt --model qwen3:4b --host http://localhost:11434
 
 Exit code is `0` when the verdict is grounded, `1` when it isn't — so you can gate a pipeline on *faithfulness*, not just on the label.
 
+### No GPU? Use a free API tier
+
+Every command also runs against an OpenAI-compatible free tier — no local model needed. Set the provider's key in your environment and pass `--backend`:
+
+```bash
+export OPENROUTER_API_KEY=...        # free key from openrouter.ai
+glassbox audit email.txt --backend openrouter        # defaults to a free Qwen
+glassbox audit email.txt --backend groq --model llama-3.3-70b-versatile
+```
+
+### JSON output and whole corpora
+
+Add `--json` to any analysis command for machine-readable output you can gate a CI job on:
+
+```bash
+glassbox audit email.txt --json | jq '.trustworthy'
+```
+
+And `batch` audits a whole corpus (JSON Lines of `{"document": ...}`), reporting how often the *model's* verdicts hold up — a property of the model, not one document:
+
+```bash
+glassbox batch inbox.jsonl --backend openrouter
+```
+```
+batch audit over 120 document(s):
+
+  grounded:     118/120  (98%)
+  faithful:     104/120  (87%)
+  robust:       89/120   (74%)
+  trustworthy:  81/120   (68%)
+```
+
 ## Does the verdict actually depend on its evidence?
 
 Citing real text isn't the same as reasoning from it. `glassbox probe` runs the **counterfactual** test: it erases each cited span, re-decides, and checks whether the verdict actually moves. Evidence whose removal flips the label is load-bearing; evidence the verdict survives without is decoration.
