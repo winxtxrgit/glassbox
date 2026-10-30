@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling>=1.27,<1.28"]
+build-backend = "hatchling.build"
+
+[project]
+name = "glassbox"
+dynamic = ["version"]
+description = "Explainable LLM triage that cites its evidence — and a harness that checks whether the explanation is faithful."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Thanut Jongteerathanachote" }]
+keywords = ["llm", "explainability", "interpretability", "faithfulness", "qwen", "triage", "ollama", "open-weights"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# No third-party dependencies: the local backend talks to Ollama over plain HTTP
+# via the standard library, so `glassbox` installs and imports with nothing else.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+glassbox = "glassbox.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/winxtxrgit/glassbox"
+Issues = "https://github.com/winxtxrgit/glassbox/issues"
+
+[tool.hatch.version]
+path = "src/glassbox/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "LICENSE"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
