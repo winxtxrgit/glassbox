@@ -38,6 +38,26 @@ grounding:  UNFAITHFUL - 1 cited span(s) are not in the document.
 
 The model cited one real span and one it made up. glassbox caught the fake.
 
+## One command: `audit`
+
+Each lens below answers one question. `audit` runs the three single-document lenses at once — grounding, faithfulness, consistency — and tells you whether a verdict clears all three. A verdict is only as trustworthy as its weakest check.
+
+```bash
+glassbox audit --demo        # no model needed
+```
+
+```
+verdict:    suspicious (confidence 0.90)
+
+grounded:   PASS - every cited span exists in the document
+faithful:   PASS - erasing the cited evidence flips the verdict
+robust:     FAIL - a meaning-preserving edit flipped the decision (lowercase)
+
+trust:      2/3 checks passed - treat this verdict with caution.
+```
+
+This verdict cited real evidence and genuinely depended on it — but lower-casing the document flipped the decision, so it was keying on surface form. `audit` catches that in one shot. Run it for real with `glassbox audit email.txt`; exit code is `0` only when all three pass.
+
 ## Run it for real (free, local)
 
 glassbox talks to [Ollama](https://ollama.com) — open models on your own machine, no API bill:

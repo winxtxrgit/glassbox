@@ -1,6 +1,8 @@
-"""Command line: ``triage``, ``probe``, ``stress``, ``calibrate``, ``demo``.
+"""Command line: ``triage``, ``audit``, ``probe``, ``stress``, ``calibrate``, ``lens``, ``demo``.
 
-``triage`` classifies a document and grounds its evidence (phase 1). ``probe``
+``audit`` runs grounding + faithfulness + consistency on one verdict and reports
+whether it clears all three. ``triage`` classifies a document and grounds its
+evidence (phase 1). ``probe``
 erases each cited span and re-decides, revealing which evidence drives the verdict
 and which is decoration (phase 2). ``stress`` re-decides after meaning-preserving
 edits, exposing a verdict that tracks surface form rather than meaning (phase 3).
@@ -18,6 +20,7 @@ import json
 import sys
 
 from . import __version__
+from .audit import AuditReport, audit
 from .backends import (
     DEFAULT_MODEL,
     BackendError,
@@ -146,6 +149,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ollama model tag (default: %(default)s)",
     )
     t.add_argument(
+        "--host",
+        default="http://localhost:11434",
+        help="Ollama server URL (default: %(default)s)",
+    )
+
+    a = sub.add_parser(
+        "audit",
+        help="all-in-one: grounding + faithfulness + consistency on one verdict",
+    )
+    a.add_argument("file", nargs="?", help="document to audit (omit with --demo)")
+    a.add_argument(
+        "--demo",
+        action="store_true",
+        help="run a built-in toy model instead of Ollama — no model needed",
+    )
+    a.add_argument("--model", default=DEFAULT_MODEL, help="Ollama model tag (default: %(default)s)")
+    a.add_argument(
         "--host",
         default="http://localhost:11434",
         help="Ollama server URL (default: %(default)s)",
@@ -512,10 +532,79 @@ def _cmd_lens(args) -> int:
     return 0
 
 
+def _render_audit(report: AuditReport) -> str:
+    v = report.verdict
+    lines = [f"verdict:    {v.label} (confidence {v.confidence:.2f})", ""]
+
+    if report.grounded:
+        g = "PASS - every cited span exists in the document"
+    elif v.hallucinated_citations:
+        g = f"FAIL - {len(v.hallucinated_citations)} cited span(s) are not in the document"
+    else:
+        g = "FAIL - the verdict cited no evidence"
+    lines.append(f"grounded:   {g}")
+
+    if not report.faithfulness.testable:
+        f = "FAIL - no grounded evidence to test"
+    elif report.faithful:
+        f = "PASS - erasing the cited evidence flips the verdict"
+    else:
+        f = "FAIL - the verdict survives with its evidence erased (post-hoc)"
+    lines.append(f"faithful:   {f}")
+
+    if not report.consistency.testable:
+        r = "FAIL - no edit changed the document"
+    elif report.robust:
+        r = "PASS - holds under every meaning-preserving edit"
+    else:
+        names = ", ".join(flip.perturbation.name for flip in report.consistency.flips)
+        r = f"FAIL - a meaning-preserving edit flipped the decision ({names})"
+    lines.append(f"robust:     {r}")
+
+    lines.append("")
+    total = len(report.checks)
+    if report.trustworthy:
+        lines.append(f"trust:      {report.passed}/{total} checks passed - this verdict holds up.")
+    else:
+        lines.append(
+            f"trust:      {report.passed}/{total} checks passed - treat this verdict with caution."
+        )
+    return "\n".join(lines)
+
+
+def _cmd_audit(args) -> int:
+    if args.demo:
+        document = _PROBE_DEMO_DOCUMENT
+        backend = CallableBackend(_probe_demo_model)
+    elif args.file:
+        try:
+            with open(args.file, encoding="utf-8") as handle:
+                document = handle.read()
+        except OSError as error:
+            print(f"glassbox: {error}", file=sys.stderr)
+            return 2
+        backend = OllamaBackend(model=args.model, host=args.host)
+    else:
+        print("glassbox: give a file to audit, or pass --demo", file=sys.stderr)
+        return 2
+
+    if args.demo:
+        print("Document:\n" + document + "\n")
+    try:
+        report = audit(document, backend, DEFAULT_POLICY)
+    except (BackendError, TriageError) as error:
+        print(f"glassbox: {error}", file=sys.stderr)
+        return 2
+
+    print(_render_audit(report))
+    return 0 if report.trustworthy else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handlers = {
         "triage": _cmd_triage,
+        "audit": _cmd_audit,
         "probe": _cmd_probe,
         "stress": _cmd_stress,
         "calibrate": _cmd_calibrate,

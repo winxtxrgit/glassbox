@@ -6,4 +6,4 @@ source. A rationale that quotes text the document never contained is not an
 explanation — it's a tell. glassbox finds those tells.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

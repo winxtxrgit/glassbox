@@ -109,6 +109,22 @@ def test_calibrate_reads_a_dataset_file(tmp_path, capsys, monkeypatch):
     assert "WELL CALIBRATED" in capsys.readouterr().out
 
 
+def test_audit_demo_runs_all_three_lenses(capsys):
+    # The demo verdict is grounded + faithful but case-brittle, so audit reports
+    # 2/3 and exits non-zero.
+    assert main(["audit", "--demo"]) == 1
+    out = capsys.readouterr().out
+    assert "grounded:   PASS" in out
+    assert "faithful:   PASS" in out
+    assert "robust:     FAIL" in out
+    assert "2/3 checks passed" in out
+
+
+def test_audit_without_file_or_demo_errors(capsys):
+    assert main(["audit"]) == 2
+    assert "give a file to audit, or pass --demo" in capsys.readouterr().err
+
+
 def test_lens_without_extra_gives_install_hint(capsys, monkeypatch):
     import glassbox.cli as cli
 
