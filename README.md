@@ -127,6 +127,33 @@ glassbox calibrate examples/phishing.jsonl --model qwen2.5:3b
 
 Exit code is `0` when the confidence is well calibrated, `1` when it's materially over- or under-confident.
 
+## Inside the model (white-box)
+
+Phases 1-4 only ever saw the model's output. Because the weights are local, the last phase opens a small model up. `glassbox lens` shows two classic views — install the optional extra first (`pip install -e ".[whitebox]"`, torch + transformers):
+
+```bash
+glassbox lens "The Eiffel Tower is in the city of" --model gpt2
+```
+
+```
+predicted:  ' Paris'  (p=0.070)
+
+logit lens (top token as the prediction forms, by layer):
+  L01  ' the'         0.690
+  ...
+  L09  ' Rome'        0.192
+  L10  ' London'      0.285
+  L11  ' Paris'       0.183
+  L12  ' Paris'       0.070
+
+occlusion attribution (mask each token -> drop in P(predicted)):
+  +0.070  ' of' (token 9)
+  +0.065  ' the' (token 7)
+  ...
+```
+
+The **logit lens** decodes the residual stream at each layer through the model's own output head: you watch the answer form — generic `the`, then a cluster of cities (`Rome`, `London`), settling on `Paris`. **Occlusion attribution** masks each input token and measures the drop in the predicted token's probability — the mechanistic echo of `probe`'s erasure test, but read straight off the logits instead of inferred from the output. The black box and the glass box, measuring the same thing two ways.
+
 ## How it works
 
 ```
@@ -146,13 +173,13 @@ Zero third-party dependencies — the Ollama backend speaks plain HTTP from the 
 
 ## Roadmap
 
-A longer build toward **behavioural interpretability of black-box LLMs**:
+Five lenses on **interpretability of (mostly black-box) LLMs** — all five built:
 
 - **✅ Grounding** — does the cited evidence exist? (`glassbox triage`)
 - **✅ Counterfactual faithfulness** — erase the cited span; does the verdict actually flip? If not, the citation wasn't load-bearing. (`glassbox probe`)
 - **✅ Consistency** — reword the document meaning-for-meaning; does the decision hold? (`glassbox stress`)
-- **✅ Calibration** — do the confidence numbers mean anything across a labelled set? (`glassbox calibrate`) *(you are here)*
-- **White-box side-quest** — because the weights are local, open the model up: attention and logit-lens views of *where* the signal is read, connected back to the black-box findings.
+- **✅ Calibration** — do the confidence numbers mean anything across a labelled set? (`glassbox calibrate`)
+- **✅ White-box** — the weights are local, so open the model up: logit-lens and occlusion views of *where* the signal is read, connected back to the black-box findings. (`glassbox lens`)
 
 ## Development
 

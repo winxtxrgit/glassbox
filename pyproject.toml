@@ -26,6 +26,9 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+# Phase 5 only: look inside a small local model. Heavy, hence optional — the core
+# package and the black-box analyses (triage/probe/stress/calibrate) need neither.
+whitebox = ["torch>=2", "transformers>=4"]
 
 [project.scripts]
 glassbox = "glassbox.cli:main"

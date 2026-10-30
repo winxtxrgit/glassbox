@@ -107,3 +107,13 @@ def test_calibrate_reads_a_dataset_file(tmp_path, capsys, monkeypatch):
 
     assert main(["calibrate", str(data)]) == 0  # well calibrated -> exit 0
     assert "WELL CALIBRATED" in capsys.readouterr().out
+
+
+def test_lens_without_extra_gives_install_hint(capsys, monkeypatch):
+    import glassbox.cli as cli
+
+    # Force the "extra not installed" path so the test is deterministic whether
+    # or not torch happens to be present in the environment.
+    monkeypatch.setattr(cli, "whitebox_available", lambda: False)
+    assert main(["lens", "hello world"]) == 2
+    assert 'pip install -e ".[whitebox]"' in capsys.readouterr().err

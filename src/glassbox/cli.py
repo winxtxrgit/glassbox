@@ -5,9 +5,10 @@ erases each cited span and re-decides, revealing which evidence drives the verdi
 and which is decoration (phase 2). ``stress`` re-decides after meaning-preserving
 edits, exposing a verdict that tracks surface form rather than meaning (phase 3).
 ``calibrate`` runs a labelled set and checks whether the confidence numbers match
-how often the model is actually right (phase 4). The analysis verbs run a real
-local model (Ollama + Qwen by default); ``demo`` and the ``--demo`` flags run
-built-in examples through canned backends, no model needed.
+how often the model is actually right (phase 4). ``lens`` opens a small local model
+up — logit lens and occlusion attribution (phase 5, needs the ``whitebox`` extra).
+The black-box verbs run a real local model (Ollama + Qwen by default); ``demo`` and
+the ``--demo`` flags run built-in examples through canned backends, no model needed.
 """
 
 from __future__ import annotations
@@ -36,6 +37,15 @@ from .faithfulness import FaithfulnessReport, analyze
 from .prompts import DEFAULT_POLICY
 from .schema import Verdict
 from .triage import TriageError, triage
+from .whitebox import LensResult
+from .whitebox import analyze as lens_analyze
+from .whitebox import available as whitebox_available
+
+
+def _ascii(text: str) -> str:
+    """Make model-derived token text safe to print on any console encoding."""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
+
 
 # A small worked example: a phishing lure. The canned reply cites one real span
 # and one fabricated one, so `glassbox demo` shows the grounding check earning
@@ -194,6 +204,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--host",
         default="http://localhost:11434",
         help="Ollama server URL (default: %(default)s)",
+    )
+
+    lens = sub.add_parser(
+        "lens",
+        help="white-box: logit lens + occlusion attribution (needs the whitebox extra)",
+    )
+    lens.add_argument("prompt", help="text to run through the model")
+    lens.add_argument(
+        "--model",
+        default="gpt2",
+        help="Hugging Face causal-LM name (default: %(default)s)",
     )
 
     sub.add_parser("demo", help="run a built-in example — no model needed")
@@ -449,6 +470,48 @@ def _cmd_calibrate(args) -> int:
     return 0 if not (report.overconfident or report.underconfident) else 1
 
 
+def _render_lens(result: LensResult) -> str:
+    tokens = [_ascii(t) for t in result.prompt_tokens]
+    lines = [
+        f"model:      {result.model}",
+        f"tokens:     {tokens}",
+        f"predicted:  {_ascii(result.predicted)!r}  (p={result.predicted_prob:.3f})",
+        "",
+        "logit lens (top token as the prediction forms, by layer):",
+    ]
+    for step in result.layer_trace:
+        lines.append(f"  L{step.layer:02d}  {_ascii(step.token)!r:<14} {step.prob:.3f}")
+
+    lines += ["", "occlusion attribution (mask each token -> drop in P(predicted)):"]
+    for attribution in result.attributions:
+        lines.append(
+            f"  {attribution.delta:+.3f}  {_ascii(attribution.token)!r} (token {attribution.index})"
+        )
+    lines.append("")
+    lines.append(
+        "A large positive drop means the model leaned on that token to make its "
+        "prediction - the inside-the-model echo of `probe`'s erasure test."
+    )
+    return "\n".join(lines)
+
+
+def _cmd_lens(args) -> int:
+    if not whitebox_available():
+        print(
+            "glassbox: the lens needs the optional white-box dependencies. "
+            'Install them with: pip install -e ".[whitebox]"',
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        result = lens_analyze(args.prompt, model_name=args.model)
+    except Exception as error:  # model download / load failures vary by backend
+        print(f"glassbox: could not run the model {args.model!r}: {error}", file=sys.stderr)
+        return 2
+    print(_render_lens(result))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handlers = {
@@ -456,6 +519,7 @@ def main(argv: list[str] | None = None) -> int:
         "probe": _cmd_probe,
         "stress": _cmd_stress,
         "calibrate": _cmd_calibrate,
+        "lens": _cmd_lens,
         "demo": _cmd_demo,
     }
     return handlers[args.command](args)
