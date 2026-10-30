@@ -1,0 +1,10 @@
+{"document": "From: it-support@secure-login.example\nSubject: Verify your account\n\nYour mailbox is over quota. Verify your password within 24 hours or your account will be closed.", "label": "suspicious"}
+{"document": "URGENT: A wire transfer of $8,400 is pending your approval. Confirm now at http://pay-portal.example/confirm to release the funds.", "label": "suspicious"}
+{"document": "Hi team, the Q3 numbers are attached. Let's review them in Thursday's standup. Thanks!", "label": "benign"}
+{"document": "Your package DHL-4471 could not be delivered. Update your address and pay the 2.99 fee here: http://dhl-redelivery.example", "label": "suspicious"}
+{"document": "Reminder: the office will be closed on Monday for the public holiday. Have a great long weekend.", "label": "benign"}
+{"document": "Security alert: unusual sign-in to your account from a new device. If this wasn't you, secure your account immediately via the link below.", "label": "suspicious"}
+{"document": "Can you send me the latest version of the design doc when you get a chance? No rush.", "label": "benign"}
+{"document": "Dear user, we detected a problem with your billing. Re-enter your card details to avoid service interruption: http://billing-update.example", "label": "suspicious"}
+{"document": "Lunch moved to 12:30 at the usual place. Let me know if that doesn't work for you.", "label": "benign"}
+{"document": "Please find attached the signed contract for the Acme project. Counter-signed copy to follow next week.", "label": "benign"}

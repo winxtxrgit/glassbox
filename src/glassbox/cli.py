@@ -1,11 +1,13 @@
-"""Command line: ``triage``, ``probe``, ``stress``, ``demo``.
+"""Command line: ``triage``, ``probe``, ``stress``, ``calibrate``, ``demo``.
 
 ``triage`` classifies a document and grounds its evidence (phase 1). ``probe``
 erases each cited span and re-decides, revealing which evidence drives the verdict
 and which is decoration (phase 2). ``stress`` re-decides after meaning-preserving
 edits, exposing a verdict that tracks surface form rather than meaning (phase 3).
-The first three run a real local model (Ollama + Qwen by default); ``demo`` and
-the ``--demo`` flags run built-in examples through canned backends, no model needed.
+``calibrate`` runs a labelled set and checks whether the confidence numbers match
+how often the model is actually right (phase 4). The analysis verbs run a real
+local model (Ollama + Qwen by default); ``demo`` and the ``--demo`` flags run
+built-in examples through canned backends, no model needed.
 """
 
 from __future__ import annotations
@@ -21,6 +23,13 @@ from .backends import (
     CallableBackend,
     OllamaBackend,
     StubBackend,
+)
+from .calibration import (
+    CalibrationReport,
+    DatasetError,
+    Example,
+    evaluate,
+    load_dataset,
 )
 from .consistency import ConsistencyReport, check
 from .faithfulness import FaithfulnessReport, analyze
@@ -81,6 +90,36 @@ def _probe_demo_model(system: str, user: str) -> str:
     )
 
 
+# For `calibrate --demo`: a labelled set and a keyword model that stamps 0.90 on
+# everything it flags. It gets 6 of 10 right — so calibration exposes an
+# overconfident model whose confidence number carries no information.
+_CALIB_DEMO_KEYWORDS = ("password", "verify", "urgent", "wire")
+_CALIB_DEMO_DATA: tuple[tuple[str, str], ...] = (
+    ("Please verify your password immediately.", "suspicious"),
+    ("Urgent action required on your account.", "suspicious"),
+    ("Complete the wire transfer by 5pm.", "suspicious"),
+    ("Reset the password using this link.", "suspicious"),
+    ("Lunch at the usual place tomorrow?", "benign"),
+    ("The quarterly report is attached.", "benign"),
+    ("Your account shows unusual sign-in activity.", "suspicious"),  # no keyword -> missed
+    ("Click the secure link to restore access.", "suspicious"),  # no keyword -> missed
+    ("Please verify the delivery address below.", "benign"),  # 'verify' -> false alarm
+    ("Can you confirm the wire diagram in the spec?", "benign"),  # 'wire' -> false alarm
+)
+
+
+def _calib_demo_model(system: str, user: str) -> str:
+    document = user.split("DOCUMENT:\n", 1)[-1].lower()
+    suspicious = any(keyword in document for keyword in _CALIB_DEMO_KEYWORDS)
+    return json.dumps(
+        {
+            "label": "suspicious" if suspicious else "benign",
+            "confidence": 0.9,  # the tell: the same confidence regardless of the document
+            "evidence": [],
+        }
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="glassbox",
@@ -131,6 +170,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--model", default=DEFAULT_MODEL, help="Ollama model tag (default: %(default)s)")
     s.add_argument(
+        "--host",
+        default="http://localhost:11434",
+        help="Ollama server URL (default: %(default)s)",
+    )
+
+    c = sub.add_parser(
+        "calibrate",
+        help="do the confidence numbers mean anything? (needs a labelled set)",
+    )
+    c.add_argument(
+        "dataset",
+        nargs="?",
+        help="JSON Lines file of {'document','label'} (omit with --demo)",
+    )
+    c.add_argument(
+        "--demo",
+        action="store_true",
+        help="run a built-in labelled set and toy model — no model needed",
+    )
+    c.add_argument("--model", default=DEFAULT_MODEL, help="Ollama model tag (default: %(default)s)")
+    c.add_argument(
         "--host",
         default="http://localhost:11434",
         help="Ollama server URL (default: %(default)s)",
@@ -324,12 +384,78 @@ def _cmd_stress(args) -> int:
     return 0 if report.robust else 1
 
 
+def _render_calibration(report: CalibrationReport) -> str:
+    skipped = f" ({report.errors} skipped: unparseable)" if report.errors else ""
+    lines = [f"calibration over {report.n} example(s){skipped}:", ""]
+    if report.n == 0:
+        lines.append("  (no scored predictions)")
+        return "\n".join(lines)
+
+    sign = "+" if report.gap >= 0 else "-"
+    lines += [
+        f"accuracy:        {report.accuracy:.2f}",
+        f"mean confidence: {report.mean_confidence:.2f}",
+        f"gap:             {sign}{abs(report.gap):.2f}",
+        f"ECE:             {report.ece:.2f}   (0 = perfectly calibrated)",
+        f"Brier:           {report.brier:.2f}   (0 = perfect)",
+        "",
+        "reliability (per confidence band):",
+    ]
+    for row in report.reliability():
+        lines.append(
+            f"  conf {row.low:.2f}-{row.high:.2f} | n={row.count:<3d} "
+            f"| said {row.avg_confidence:.2f} | right {row.accuracy:.2f}"
+        )
+
+    lines.append("")
+    if report.overconfident:
+        lines.append(
+            f"verdict:    OVERCONFIDENT - it claims {report.mean_confidence:.2f} but is right "
+            f"{report.accuracy:.2f} of the time. The confidence number is unreliable."
+        )
+    elif report.underconfident:
+        lines.append(
+            f"verdict:    UNDERCONFIDENT - it is right {report.accuracy:.2f} of the time but only "
+            f"claims {report.mean_confidence:.2f}."
+        )
+    else:
+        lines.append("verdict:    WELL CALIBRATED - stated confidence tracks actual accuracy.")
+    return "\n".join(lines)
+
+
+def _cmd_calibrate(args) -> int:
+    if args.demo:
+        dataset = [Example(doc, gold) for doc, gold in _CALIB_DEMO_DATA]
+        backend = CallableBackend(_calib_demo_model)
+    elif args.dataset:
+        try:
+            dataset = load_dataset(args.dataset)
+        except (OSError, DatasetError) as error:
+            print(f"glassbox: {error}", file=sys.stderr)
+            return 2
+        backend = OllamaBackend(model=args.model, host=args.host)
+    else:
+        print("glassbox: give a labelled dataset, or pass --demo", file=sys.stderr)
+        return 2
+
+    try:
+        report = evaluate(dataset, backend, DEFAULT_POLICY)
+    except (BackendError, TriageError) as error:
+        print(f"glassbox: {error}", file=sys.stderr)
+        return 2
+
+    print(_render_calibration(report))
+    # Non-zero when the confidence is miscalibrated enough to be misleading.
+    return 0 if not (report.overconfident or report.underconfident) else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handlers = {
         "triage": _cmd_triage,
         "probe": _cmd_probe,
         "stress": _cmd_stress,
+        "calibrate": _cmd_calibrate,
         "demo": _cmd_demo,
     }
     return handlers[args.command](args)

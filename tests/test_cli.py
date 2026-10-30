@@ -72,3 +72,38 @@ def test_stress_demo_detects_surface_sensitivity(capsys):
 def test_stress_without_file_or_demo_errors(capsys):
     assert main(["stress"]) == 2
     assert "give a file to stress-test, or pass --demo" in capsys.readouterr().err
+
+
+def test_calibrate_demo_flags_overconfidence(capsys):
+    assert main(["calibrate", "--demo"]) == 1  # overconfident -> non-zero
+    out = capsys.readouterr().out
+    assert "accuracy:        0.60" in out
+    assert "ECE:             0.30" in out
+    assert "OVERCONFIDENT" in out
+
+
+def test_calibrate_without_dataset_or_demo_errors(capsys):
+    assert main(["calibrate"]) == 2
+    assert "give a labelled dataset, or pass --demo" in capsys.readouterr().err
+
+
+def test_calibrate_reads_a_dataset_file(tmp_path, capsys, monkeypatch):
+    data = tmp_path / "d.jsonl"
+    data.write_text(
+        '{"document": "verify your password", "label": "suspicious"}\n'
+        '{"document": "lunch at noon", "label": "benign"}\n'
+    )
+    import glassbox.cli as cli
+
+    # A perfectly-calibrated toy: right every time and says so (confidence 1.0).
+    def model(system, user):
+        import json
+
+        document = user.split("DOCUMENT:\n", 1)[-1]
+        label = "suspicious" if "password" in document else "benign"
+        return json.dumps({"label": label, "confidence": 1.0, "evidence": []})
+
+    monkeypatch.setattr(cli, "OllamaBackend", lambda **kwargs: cli.CallableBackend(model))
+
+    assert main(["calibrate", str(data)]) == 0  # well calibrated -> exit 0
+    assert "WELL CALIBRATED" in capsys.readouterr().out

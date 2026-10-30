@@ -98,6 +98,35 @@ robust:     NO - 1 of 2 edit(s) flipped the verdict. The decision tracks surface
 
 Here the toy model was reading letter case, not content — so lower-casing alone broke it. A verdict that survives every edit is robust (exit `0`); one that flips is fragile (exit `1`). No-op edits don't count toward the score.
 
+## Do the confidence numbers mean anything?
+
+A verdict comes with a confidence like `0.90`. Is that a probability, or decoration? `glassbox calibrate` needs a **labelled set** — documents whose true labels you know — and checks whether stated confidence matches observed accuracy. The headline is **ECE** (expected calibration error): bin predictions by confidence and compare each bin's average confidence to how often it was actually right.
+
+```bash
+glassbox calibrate --demo
+```
+
+```
+accuracy:        0.60
+mean confidence: 0.90
+gap:             +0.30
+ECE:             0.30   (0 = perfectly calibrated)
+Brier:           0.33   (0 = perfect)
+
+reliability (per confidence band):
+  conf 0.90-1.00 | n=10  | said 0.90 | right 0.60
+
+verdict:    OVERCONFIDENT - it claims 0.90 but is right 0.60 of the time.
+```
+
+The toy model stamps `0.90` on everything — a confidence that never varies carries no information, and calibration proves it. Run it on real data with a JSON-Lines file of `{"document", "label"}`:
+
+```bash
+glassbox calibrate examples/phishing.jsonl --model qwen2.5:3b
+```
+
+Exit code is `0` when the confidence is well calibrated, `1` when it's materially over- or under-confident.
+
 ## How it works
 
 ```
@@ -121,8 +150,8 @@ A longer build toward **behavioural interpretability of black-box LLMs**:
 
 - **✅ Grounding** — does the cited evidence exist? (`glassbox triage`)
 - **✅ Counterfactual faithfulness** — erase the cited span; does the verdict actually flip? If not, the citation wasn't load-bearing. (`glassbox probe`)
-- **✅ Consistency** — reword the document meaning-for-meaning; does the decision hold? (`glassbox stress`) *(you are here)*
-- **Calibration** — do the confidence numbers mean anything across a labelled set?
+- **✅ Consistency** — reword the document meaning-for-meaning; does the decision hold? (`glassbox stress`)
+- **✅ Calibration** — do the confidence numbers mean anything across a labelled set? (`glassbox calibrate`) *(you are here)*
 - **White-box side-quest** — because the weights are local, open the model up: attention and logit-lens views of *where* the signal is read, connected back to the black-box findings.
 
 ## Development
