@@ -83,7 +83,12 @@ def analyze(prompt: str, model_name: str = "gpt2", top_attributions: int = 8) ->
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    # Refuse pickle-format (.bin) weights: loading those runs arbitrary code
+    # embedded in the pickle, so a malicious or typo-squatted model name could
+    # execute code. safetensors is a non-executable format; mainstream models
+    # (gpt2, the Qwen/Llama families) all ship it. trust_remote_code is left at
+    # its safe default of False, blocking custom modeling code as well.
+    model = AutoModelForCausalLM.from_pretrained(model_name, use_safetensors=True)
     model.eval()
 
     ids = tokenizer(prompt, return_tensors="pt").input_ids
