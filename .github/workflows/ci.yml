@@ -40,5 +40,8 @@ jobs:
           glassbox audit --demo || test $? -eq 1
           glassbox batch --demo || test $? -eq 1
           glassbox calibrate --demo || test $? -eq 1
-          glassbox audit --demo --json | python -c "import sys, json; json.load(sys.stdin)"
+          # audit exits 1 on an untrustworthy verdict; capture then validate the
+          # JSON separately so pipefail doesn't fail the step on that exit code.
+          glassbox audit --demo --json > audit.json || test $? -eq 1
+          python -c "import json; json.load(open('audit.json'))"
         shell: bash
