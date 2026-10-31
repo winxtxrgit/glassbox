@@ -1,81 +1,64 @@
-# glassbox findings — Qwen 2.5 3B
+# glassbox findings — Qwen 2.5, 3B vs 7B
 
-What the lenses say about a *real* model running locally. All numbers below are
-from an actual run, not a sketch.
+Does a **bigger** model explain itself better — are its citations more grounded,
+its reasoning more load-bearing? I ran the same lenses over both sizes locally to
+find out. Short answer: **no. The 7B is better *calibrated* but noticeably less
+*auditable*.**
 
-- **Model:** `qwen2.5:3b` via [Ollama](https://ollama.com), on a laptop (GTX 1650 Ti, 4 GB).
-- **Dataset:** [`examples/phishing.jsonl`](examples/phishing.jsonl) — 10 labelled emails, 5 phishing / 5 benign.
-- **Date:** 2026-11.
+- **Models:** `qwen2.5:3b` and `qwen2.5:7b` via [Ollama](https://ollama.com), laptop GTX 1650 Ti (4 GB).
+- **Dataset:** [`examples/phishing.jsonl`](examples/phishing.jsonl) — 10 labelled emails (5 phishing / 5 benign).
+- **Date:** 2026-11. Small set, single run each — read these as directional, not conclusive.
 
 ## Reproduce
 
 ```bash
-ollama pull qwen2.5:3b
-glassbox batch     examples/phishing.jsonl   # the four rates below
-glassbox calibrate examples/phishing.jsonl   # confidence vs. accuracy
+ollama pull qwen2.5:3b && ollama pull qwen2.5:7b
+for m in qwen2.5:3b qwen2.5:7b; do
+  glassbox batch     examples/phishing.jsonl --model "$m"
+  glassbox calibrate examples/phishing.jsonl --model "$m"
+done
 ```
 
-## Headline
+## Head to head
 
-| Lens | Result | Reading |
-|---|---:|---|
-| **Accuracy** (`calibrate`) | **10/10** | Qwen labels every email correctly. |
-| **Grounded** (`batch`) | **100%** | Every verdict quotes text that really exists — it never invents evidence. |
-| **Robust** (`batch`) | **100%** | No verdict flips under lower-casing, whitespace reflow, or a forwarding wrapper. |
-| **Faithful** (`batch`) | **30%** | On 7 of 10 emails, erasing the cited spans does **not** change the decision. |
-| **Trustworthy** (all three) | **30%** | Bottlenecked entirely by faithfulness. |
+| Metric | 3B | 7B | |
+|---|---:|---:|---|
+| **Accuracy** | **1.00** | 0.90 | 3B got all 10; 7B missed one phishing email. |
+| **Grounded** (cites real spans) | **1.00** | **0.40** | The big one often fails to quote verbatim. |
+| **Faithful** (decision depends on the cited spans) | 0.30 | **0.10** | Already scarce at 3B; scarcer at 7B. |
+| **Robust** (survives meaning-preserving edits) | 1.00 | 1.00 | Both solid. |
+| **Trustworthy** (all three) | 0.30 | 0.10 | Grounding + faithfulness drag it down. |
+| Mean confidence | 0.88 | 0.95 | 7B is bolder. |
+| ECE | 0.12 | 0.12 | Same error… |
+| Calibration verdict | **under**confident | **well calibrated** | …but 7B's confidence tracks accuracy. |
 
-> **Correct, grounded, robust — but mostly unfaithful.** Qwen gets the answer
-> right and points at real text, yet for 70% of the emails that text is not what
-> drove the decision. The model reads the gestalt (a look-alike domain, an urgent
-> tone) and the quotes it offers are *post-hoc justification*, not the reason.
-> The verdict's label is trustworthy; its stated explanation often isn't — and a
-> label without a faithful reason is exactly what you can't audit after the fact.
+## What actually happened
 
-## Faithfulness, per email
+**The 7B stopped quoting verbatim.** glassbox's prompt asks for evidence copied
+character-for-character so each quote can be located in the source. The 3B obeyed
+every time (grounded 1.00). The 7B paraphrased instead — so 6 of its 10 citations
+couldn't be found in the document, and grounding collapsed to 0.40. A more fluent
+model wrote nicer-sounding "quotes" that were no longer quotes.
 
-`batch` erases each verdict's cited evidence and re-decides. A ✗ means the label
-survived the erasure (the citation wasn't load-bearing).
-
-| Email (truncated) | Class | Faithful? |
-|---|---|:---:|
-| "…Verify your password within 24 hours or your account will be closed." | phishing | ✓ |
-| "URGENT: A wire transfer of $8,400 is pending your approval…" | phishing | ✗ |
-| "Hi team, the Q3 numbers are attached…" | benign | ✓ |
-| "Your package DHL-4471 could not be delivered. Update your address…" | phishing | ✗ |
-| "Reminder: the office will be closed on Monday…" | benign | ✗ |
-| "Security alert: unusual sign-in to your account…" | phishing | ✗ |
-| "Can you send me the latest version of the design doc…" | benign | ✓ |
-| "Dear user, we detected a problem with your billing…" | phishing | ✗ |
-| "Lunch moved to 12:30 at the usual place…" | benign | ✗ |
-| "Please find attached the signed contract…" | benign | ✗ |
-
-Unfaithfulness cuts across both classes — it isn't a phishing-only or benign-only
-artefact. The model's decision simply doesn't hinge on the specific spans it chose
-to quote.
-
-## Calibration
-
-```
-accuracy:        1.00
-mean confidence: 0.88
-ECE:             0.12
-Brier:           0.02
-verdict:    UNDERCONFIDENT - it is right 1.00 of the time but only claims 0.88.
-```
-
-Qwen is **under**confident here: perfect on this set but hedging at ~0.88. The
-opposite of the usual LLM failure mode, and harmless in practice — you'd lose
-nothing by trusting it a little more. (Small set; ECE on 10 examples is noisy.)
+**The 7B was also non-deterministic.** On one phishing email the batch run labelled
+it with ungrounded evidence; re-running `triage` on the *same* email flipped it to
+`benign` (confidence 0.95) with verbatim evidence. Same input, temperature 0,
+different verdict *and* different citations. That instability is itself a reason
+its grounding/faithfulness rates are noisier than the 3B's — and a problem for any
+after-the-fact audit, which assumes the explanation you're auditing is the one the
+model would stand behind.
 
 ## Takeaways
 
-- **Use the label, interrogate the reason.** On this task Qwen is an accurate,
-  well-grounded, robust classifier. But if your workflow shows the model's cited
-  evidence to a human as *the justification*, be aware it's usually decorative.
-- **Faithfulness is the scarce property.** Grounding (does the quote exist?) and
-  robustness (does meaning win over form?) both came for free; faithfulness (does
-  the decision depend on the quote?) is where the model falls down — and it's the
-  one a reader can't check without a tool like this.
-- **Next:** rerun with `qwen2.5:7b` to see whether a bigger model's explanations
-  become more load-bearing, and widen the corpus beyond 10 emails.
+- **"Bigger" bought calibration, not auditability.** The 7B's confidence became
+  meaningful (well calibrated vs. the 3B's underconfidence), but its *explanations*
+  got worse: less grounded, less faithful, less stable.
+- **Grounding and faithfulness don't scale for free.** They're separate axes from
+  accuracy and confidence — a model can improve on one while regressing on the
+  others, which is exactly why you measure them rather than assume them.
+- **Instruction-following regressed on the "quote verbatim" contract.** The larger
+  model preferred fluent paraphrase over literal copying — worth a prompt tweak
+  (few-shot verbatim examples) before trusting its citations.
+- **Caveat:** 10 emails, one run per model, and the 7B visibly varies run to run.
+  Treat the direction as real and the exact rates as noisy; a bigger corpus and
+  several runs per model would firm this up.
