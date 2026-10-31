@@ -1,5 +1,6 @@
 # glassbox
 
+[![CI](https://github.com/winxtxrgit/glassbox/actions/workflows/ci.yml/badge.svg)](https://github.com/winxtxrgit/glassbox/actions/workflows/ci.yml)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-0e75b6)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)
 ![Runs locally](https://img.shields.io/badge/LLM-local%20%2F%20free-8957e5)
