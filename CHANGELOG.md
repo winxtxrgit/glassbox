@@ -13,6 +13,10 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
   marker (the package ships type hints), and richer metadata (classifiers,
   keywords, project URLs) — `python -m build` + `twine check --strict` pass.
 - **README**: a "How glassbox compares" table and a "Used for" section.
+- **Benchmark suite** (`benchmarks/`): a 15-document corpus (phishing / benign /
+  prompt-injection), a `run_benchmark.py` runner that compares models on grounding
+  / faithfulness / robustness / calibration / latency, and `RESULTS.md` with a real
+  3B-vs-7B run.
 - **`docs/ROADMAP-30DAY.md`**: the 30-day plan to take glassbox from project to
   published tool.
 - **`FINDINGS.md`**: results from running the lenses against real local models

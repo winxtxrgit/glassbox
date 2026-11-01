@@ -244,7 +244,7 @@ glassbox isn't a full evaluation framework — it answers one question deeply: *
 - **Email / phishing triage** — is the "suspicious" verdict real, or hallucinated?
 - **Document review** — does the summary actually reflect the source?
 - **RAG pipelines** — before serving an answer, check that its citations exist.
-- **Model selection** — `glassbox batch` tells you which model hallucinates least on *your* data ([see the 3B-vs-7B run](FINDINGS.md)).
+- **Model selection** — which model is most *auditable* on your data? See the [benchmark](benchmarks/RESULTS.md) (3B beats 7B on grounding, faithfulness, and speed) and the [FINDINGS write-up](FINDINGS.md).
 - **CI gating** — exit code `0`/`1` so a pipeline stops on unfaithful output.
 
 ## Roadmap
