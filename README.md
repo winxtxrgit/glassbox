@@ -224,6 +224,29 @@ document ──▶ model (verbatim-quote prompt) ──▶ {label, confidence, r
 
 Zero third-party dependencies — the Ollama backend speaks plain HTTP from the standard library.
 
+## How glassbox compares
+
+| | glassbox | DeepEval | RAGAS | Guardrails AI | LangSmith |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Grounding (cited evidence exists?) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Counterfactual faithfulness (erase → flip?) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Consistency (rephrase → stable?) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Calibration (confidence = accuracy?) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| White-box (logit lens, occlusion) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Runs fully local, no API needed | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Zero third-party dependencies | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Exit code gates a CI pipeline | ✅ | ✅ | ❌ | ❌ | ❌ |
+
+glassbox isn't a full evaluation framework — it answers one question deeply: **is this LLM verdict faithful to the evidence it claims to have?**
+
+## Used for
+
+- **Email / phishing triage** — is the "suspicious" verdict real, or hallucinated?
+- **Document review** — does the summary actually reflect the source?
+- **RAG pipelines** — before serving an answer, check that its citations exist.
+- **Model selection** — `glassbox batch` tells you which model hallucinates least on *your* data ([see the 3B-vs-7B run](FINDINGS.md)).
+- **CI gating** — exit code `0`/`1` so a pipeline stops on unfaithful output.
+
 ## Roadmap
 
 Five lenses on **interpretability of (mostly black-box) LLMs** — all five built:

@@ -7,7 +7,14 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 
 ### Added
 - **CI** (`.github/workflows/ci.yml`): ruff + pytest across Python 3.10–3.13 on
-  Ubuntu, plus Windows and macOS on 3.13, with an end-to-end CLI smoke test.
+  Ubuntu, plus Windows and macOS on 3.13, with coverage (87%) and an end-to-end
+  CLI smoke test.
+- **PyPI packaging**: a `publish.yml` Trusted-Publishing workflow, a `py.typed`
+  marker (the package ships type hints), and richer metadata (classifiers,
+  keywords, project URLs) — `python -m build` + `twine check --strict` pass.
+- **README**: a "How glassbox compares" table and a "Used for" section.
+- **`docs/ROADMAP-30DAY.md`**: the 30-day plan to take glassbox from project to
+  published tool.
 - **`FINDINGS.md`**: results from running the lenses against real local models
   (Qwen 2.5 3B and 7B via Ollama) on the sample phishing set, with a 3B-vs-7B
   comparison.

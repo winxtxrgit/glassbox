@@ -33,7 +33,7 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
-      - run: pytest -q
+      - run: pytest -q --cov=glassbox --cov-report=term-missing
       - name: Smoke-test the CLI end to end
         run: |
           glassbox demo

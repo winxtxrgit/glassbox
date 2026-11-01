@@ -10,22 +10,43 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
-authors = [{ name = "Thanut Jongteerathanachote" }]
-keywords = ["llm", "explainability", "interpretability", "faithfulness", "qwen", "triage", "ollama", "open-weights"]
+authors = [{ name = "Thanut Jongteerathanachote", email = "winxtxr.github@gmail.com" }]
+keywords = [
+    "llm",
+    "interpretability",
+    "explainability",
+    "faithfulness",
+    "hallucination",
+    "grounding",
+    "ai-safety",
+    "audit",
+    "ollama",
+    "qwen",
+    "open-weights",
+]
+# License is declared via the SPDX `license` field above, so no License classifier
+# here (it would duplicate the expression and newer tooling rejects that).
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
+    "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security",
+    "Typing :: Typed",
 ]
 # No third-party dependencies: the local backend talks to Ollama over plain HTTP
 # via the standard library, so `glassbox` installs and imports with nothing else.
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
 # Phase 5 only: look inside a small local model. Heavy, hence optional — the core
 # package and the black-box analyses (triage/probe/stress/calibrate) need neither.
 whitebox = ["torch>=2", "transformers>=4"]
@@ -35,17 +56,22 @@ glassbox = "glassbox.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/winxtxrgit/glassbox"
+Documentation = "https://github.com/winxtxrgit/glassbox#readme"
+Repository = "https://github.com/winxtxrgit/glassbox"
 Issues = "https://github.com/winxtxrgit/glassbox/issues"
+Changelog = "https://github.com/winxtxrgit/glassbox/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "src/glassbox/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "README.md", "LICENSE"]
+include = ["src", "tests", "README.md", "LICENSE", "CHANGELOG.md"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# docs/ holds plan/writeup markdown (with illustrative code snippets) — not source.
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
