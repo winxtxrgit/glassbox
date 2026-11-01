@@ -50,7 +50,30 @@ def _normalize_punctuation(text: str) -> str:
     return text
 
 
-# Edits a semantically-grounded classifier should be invariant to.
+# --- Thai-language edits (no-ops on non-Thai text, so they're safe as defaults) ---
+
+_THAI_DIGITS = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
+
+# Politeness particles: dropping them changes register, not propositional content —
+# "within 24 hours" is just as urgent with or without a trailing ครับ/ค่ะ. Longest
+# first so "นะครับ" is removed whole before "ครับ" could split it.
+_THAI_PARTICLES = ("ครับผม", "นะครับ", "นะคะ", "ครับ", "ค่ะ", "จ้ะ")
+
+
+def _thai_numerals(text: str) -> str:
+    """Thai digits to Arabic (๒๔ -> 24) — same number, different glyphs."""
+    return text.translate(_THAI_DIGITS)
+
+
+def _drop_thai_particles(text: str) -> str:
+    """Strip trailing politeness particles — a model shouldn't read threat from them."""
+    for particle in _THAI_PARTICLES:
+        text = text.replace(particle, "")
+    return text
+
+
+# Edits a semantically-grounded classifier should be invariant to. The Thai ones
+# simply don't change English documents, so they're excluded from the score there.
 DEFAULT_PERTURBATIONS: tuple[Perturbation, ...] = (
     Perturbation("lowercase", "fold everything to lower case", str.lower),
     Perturbation("collapse whitespace", "reflow runs of spaces and newlines", _collapse_whitespace),
@@ -59,6 +82,10 @@ DEFAULT_PERTURBATIONS: tuple[Perturbation, ...] = (
     ),
     Perturbation(
         "normalize punctuation", "smart quotes and dashes to ASCII", _normalize_punctuation
+    ),
+    Perturbation("thai numerals", "Thai digits to Arabic (๒๔ -> 24)", _thai_numerals),
+    Perturbation(
+        "drop thai particles", "strip politeness particles (ครับ/ค่ะ)", _drop_thai_particles
     ),
 )
 

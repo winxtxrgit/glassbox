@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 
 from glassbox.backends import CallableBackend, StubBackend
-from glassbox.consistency import Perturbation, check
+from glassbox.consistency import (
+    Perturbation,
+    _drop_thai_particles,
+    _thai_numerals,
+    check,
+)
 from glassbox.prompts import DEFAULT_POLICY
 
 DOC = "Your mailbox is over quota. Verify your password within 24 hours to avoid suspension."
@@ -72,6 +77,41 @@ def test_untestable_when_no_edit_changes_the_document():
     )
     assert not report.testable
     assert report.robust is False
+
+
+def test_thai_perturbation_helpers():
+    assert _thai_numerals("ภายใน ๒๔ ชั่วโมง") == "ภายใน 24 ชั่วโมง"
+    assert _thai_numerals("within 24 hours") == "within 24 hours"  # no-op on Arabic
+    assert _drop_thai_particles("ยืนยันรหัสผ่านครับ") == "ยืนยันรหัสผ่าน"
+    assert _drop_thai_particles("verify now") == "verify now"  # no-op on English
+
+
+def test_thai_edits_are_noops_on_english():
+    # The Thai perturbations must not fire (and so not count) against English text.
+    report = check(DOC, CallableBackend(case_sensitive_model), DEFAULT_POLICY)
+    unchanged = {v.perturbation.name for v in report.variants if not v.changed}
+    assert "thai numerals" in unchanged
+    assert "drop thai particles" in unchanged
+
+
+def test_thai_numeral_surface_sensitivity_is_caught():
+    # A model that keys on the Thai numeral ๒๔ flips when it's rendered as 24 —
+    # a surface dependency glassbox should surface on Thai text too.
+    thai_doc = "เรียนลูกค้า กรุณายืนยันรหัสผ่านภายใน ๒๔ ชั่วโมง มิฉะนั้นบัญชีจะถูกระงับ"
+
+    def thai_numeral_model(system, user):
+        document = user.split("DOCUMENT:\n", 1)[-1]
+        suspicious = "๒๔" in document
+        import json as _json
+
+        return _json.dumps(
+            {"label": "suspicious" if suspicious else "benign", "confidence": 0.9, "evidence": []}
+        )
+
+    report = check(thai_doc, CallableBackend(thai_numeral_model), DEFAULT_POLICY)
+    assert report.original.label == "suspicious"
+    assert not report.robust
+    assert "thai numerals" in {v.perturbation.name for v in report.flips}
 
 
 def test_custom_perturbation():

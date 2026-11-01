@@ -6,6 +6,12 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- **Thai / multilingual consistency**: two meaning-preserving perturbations for
+  the consistency lens — Thai numerals to Arabic (`๒๔` → `24`) and dropping
+  politeness particles (`ครับ`/`ค่ะ`) — so `stress`/`audit` catch a verdict that
+  keys on Thai surface form. They are no-ops on non-Thai text, so they never
+  count against an English document. Added `examples/thai.jsonl` (six labelled
+  Thai emails) and tests that grounding locates Thai spans by codepoint offset.
 - **CI** (`.github/workflows/ci.yml`): ruff + pytest across Python 3.10–3.13 on
   Ubuntu, plus Windows and macOS on 3.13, with coverage (87%) and an end-to-end
   CLI smoke test.
@@ -22,6 +28,11 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 - **`FINDINGS.md`**: results from running the lenses against real local models
   (Qwen 2.5 3B and 7B via Ollama) on the sample phishing set, with a 3B-vs-7B
   comparison.
+
+### Fixed
+- CLI output is now forced to UTF-8, so non-ASCII evidence quotes (e.g. Thai
+  spans) render correctly instead of as mojibake on a legacy console code page
+  (cp874). Guarded so a captured stream under pytest is left untouched.
 
 ### Security
 - `lens` now loads models with `use_safetensors=True` (and leaves

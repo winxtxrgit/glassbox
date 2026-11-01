@@ -151,6 +151,8 @@ robust:     NO - 1 of 2 edit(s) flipped the verdict. The decision tracks surface
 
 Here the toy model was reading letter case, not content — so lower-casing alone broke it. A verdict that survives every edit is robust (exit `0`); one that flips is fragile (exit `1`). No-op edits don't count toward the score.
 
+The edit set is **multilingual**: alongside the English edits above there are Thai ones — Thai numerals to Arabic (`๒๔` → `24`) and dropping politeness particles (`ครับ`/`ค่ะ`) — that surface a verdict keying on Thai surface form. Each edit is a no-op on text it doesn't apply to, so it never counts against a document in another language. There's a labelled Thai sample at `examples/thai.jsonl`.
+
 ## Do the confidence numbers mean anything?
 
 A verdict comes with a confidence like `0.90`. Is that a probability, or decoration? `glassbox calibrate` needs a **labelled set** — documents whose true labels you know — and checks whether stated confidence matches observed accuracy. The headline is **ECE** (expected calibration error): bin predictions by confidence and compare each bin's average confidence to how often it was actually right.

@@ -16,6 +16,7 @@ a ``--demo`` that runs a canned backend with no model installed.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -632,7 +633,22 @@ def _cmd_demo(_args) -> int:
     return 0
 
 
+def _force_utf8_output() -> None:
+    """Emit UTF-8 regardless of the console code page.
+
+    On a Thai Windows console (cp874) the evidence quotes for a Thai document
+    come out as mojibake, because Python encodes stdout with the locale code
+    page. Reconfiguring to UTF-8 makes non-ASCII evidence render correctly on
+    any modern terminal. Guarded so a captured/replaced stream (e.g. under
+    pytest) is simply left alone.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_output()
     args = build_parser().parse_args(argv)
     handlers = {
         "audit": _cmd_audit,

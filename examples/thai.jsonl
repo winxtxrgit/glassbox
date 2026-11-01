@@ -1,0 +1,6 @@
+{"id": "th-phish-01", "document": "เรียนลูกค้า กรุณายืนยันรหัสผ่านของท่านภายใน 24 ชั่วโมง ที่ secure-bank.example มิฉะนั้นบัญชีจะถูกระงับ", "label": "suspicious", "category": "phishing"}
+{"id": "th-phish-02", "document": "ด่วนที่สุด! โปรดโอนเงิน 50,000 บาท ไปยังบัญชีใหม่ตามเอกสารแนบภายในวันนี้ ห้ามโทรยืนยัน -- ผู้บริหาร", "label": "suspicious", "category": "bec"}
+{"id": "th-phish-03", "document": "พัสดุของท่านถูกระงับ กรุณาชำระค่าธรรมเนียม 2 บาท เพื่อรับพัสดุที่ลิงก์นี้: http://post-redeliver.example", "label": "suspicious", "category": "phishing"}
+{"id": "th-benign-01", "document": "สวัสดีครับทีม เอกสารสรุปไตรมาส 3 แนบมาด้วยแล้ว ขอให้ช่วยรีวิวภายในวันศุกร์นะครับ ขอบคุณครับ", "label": "benign", "category": "business"}
+{"id": "th-benign-02", "document": "แจ้งเตือน: สำนักงานปิดทำการวันจันทร์เนื่องในวันหยุดนักขัตฤกษ์ ขอให้ทุกคนพักผ่อนช่วงวันหยุดยาวนะคะ", "label": "benign", "category": "notice"}
+{"id": "th-benign-03", "document": "รบกวนส่งไฟล์งานออกแบบเวอร์ชันล่าสุดให้หน่อยได้ไหมครับ ไม่รีบครับ ว่างแล้วค่อยส่งก็ได้", "label": "benign", "category": "personal"}

@@ -29,6 +29,17 @@ def test_ground_marks_verified_and_hallucinated():
     assert citations[1].start == -1
 
 
+def test_grounding_locates_thai_spans_by_codepoint():
+    # Python strings index by codepoint, so Thai spans ground with correct offsets.
+    source = "เรียนลูกค้า กรุณายืนยันรหัสผ่านภายใน 24 ชั่วโมง"
+    start, end = find_span(source, "ยืนยันรหัสผ่าน")
+    assert start != -1
+    assert source[start:end] == "ยืนยันรหัสผ่าน"
+    citations = ground(source, ["ยืนยันรหัสผ่าน", "คลิกลิงก์นี้"])
+    assert citations[0].verified  # present
+    assert not citations[1].verified  # not in the document
+
+
 def test_ground_skips_empty_and_non_string_entries():
     citations = ground("anything", ["   ", "", 42, None])  # type: ignore[list-item]
     assert citations == []
