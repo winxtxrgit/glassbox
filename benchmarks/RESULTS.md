@@ -5,9 +5,11 @@ question glassbox answers is different: when a model is right, can you *trust it
 reasons*? Run `glassbox audit` + `calibrate` over a corpus and the answer is a
 number.
 
-- **Corpus:** [`corpus.jsonl`](corpus.jsonl) — 15 short emails: 6 phishing, 6 benign,
-  3 prompt-injection (labelled suspicious — an email telling the classifier to say
-  "benign" is itself a red flag).
+- **Corpus:** [`corpus.jsonl`](corpus.jsonl) — 40 short emails: 16 phishing / scam /
+  BEC, 18 benign, 6 prompt-injection (labelled suspicious — an email telling the
+  classifier to say "benign" is itself a red flag). **The table below predates the
+  expansion:** it's from the original 15-document corpus (6 / 6 / 3). A re-run on the
+  full 40 is a follow-up — it needs a local Ollama and takes a while.
 - **Models:** `qwen2.5:3b`, `qwen2.5:7b` via [Ollama](https://ollama.com), laptop
   GTX 1650 Ti (4 GB).
 - **Date:** 2026-11.
@@ -47,10 +49,17 @@ grounding, faithfulness, or speed.**
 ```bash
 ollama pull qwen2.5:3b && ollama pull qwen2.5:7b
 python benchmarks/run_benchmark.py --models qwen2.5:3b,qwen2.5:7b
+
+# measure run-to-run non-determinism: evaluate each model N times. The main
+# table then shows the mean, and a second table shows the min-max spread per
+# metric. A metric that is stable across runs collapses to a single value.
+python benchmarks/run_benchmark.py --models qwen2.5:7b --runs 5
 ```
 
-> Caveats: 15 documents, one run per model, and the 7B is non-deterministic run to
-> run (see `FINDINGS.md`). Absolute latency is machine-specific (the 7B spills onto
-> CPU on a 4 GB GPU); the 2.3× *ratio* is the stable signal. Treat the direction as
-> real and the exact rates as noisy — a larger corpus and several runs per model
-> would firm it up.
+> Caveats: the headline table is 15 documents, one run per model. The 7B is
+> non-deterministic run to run (see `FINDINGS.md`) — `--runs N` is how you quantify
+> that rather than assert it; in a quick 2-run check the 3B was perfectly stable, so
+> the spread to watch is the 7B's. Absolute latency is machine-specific (the 7B
+> spills onto CPU on a 4 GB GPU); the 2.3× *ratio* is the stable signal. Treat the
+> direction as real and the exact rates as noisy — the larger 40-document corpus and
+> several runs per model would firm it up.
