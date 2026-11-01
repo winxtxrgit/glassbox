@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/winxtxrgit/glassbox/discussions
+    about: Ask how glassbox works, or propose an idea before filing an issue.

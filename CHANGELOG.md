@@ -12,6 +12,9 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
   keys on Thai surface form. They are no-ops on non-Thai text, so they never
   count against an English document. Added `examples/thai.jsonl` (six labelled
   Thai emails) and tests that grounding locates Thai spans by codepoint offset.
+- **Contributor onboarding**: a `CONTRIBUTING.md` (dev setup, the module map, and
+  worked "first change" recipes), GitHub issue/PR templates under `.github/`, and
+  a set of drafted launch materials + good-first-issues under `docs/launch/`.
 - **CI** (`.github/workflows/ci.yml`): ruff + pytest across Python 3.10–3.13 on
   Ubuntu, plus Windows and macOS on 3.13, with coverage (87%) and an end-to-end
   CLI smoke test.
