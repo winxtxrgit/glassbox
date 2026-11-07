@@ -51,7 +51,7 @@ Repo (MIT, pure-stdlib core): https://github.com/winxtxrgit/glassbox
 Full numbers: FINDINGS.md and benchmarks/RESULTS.md in the repo.
 
 ```bash
-pip install glassbox
+pip install glassbox-audit
 ollama pull qwen2.5:3b
 glassbox audit email.txt --model qwen2.5:3b
 ```

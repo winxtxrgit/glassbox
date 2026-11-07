@@ -3,7 +3,9 @@ requires = ["hatchling>=1.27,<1.28"]
 build-backend = "hatchling.build"
 
 [project]
-name = "glassbox"
+# The distribution is "glassbox-audit" because "glassbox" on PyPI is an unrelated
+# project. The import package and the CLI command are still `glassbox`.
+name = "glassbox-audit"
 dynamic = ["version"]
 description = "Explainable LLM triage that cites its evidence — and a harness that checks whether the explanation is faithful."
 readme = "README.md"
@@ -63,6 +65,10 @@ Changelog = "https://github.com/winxtxrgit/glassbox/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "src/glassbox/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+# The package directory doesn't match the distribution name, so name it here.
+packages = ["src/glassbox"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "README.md", "LICENSE", "CHANGELOG.md"]

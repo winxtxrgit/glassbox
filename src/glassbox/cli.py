@@ -623,7 +623,7 @@ def _cmd_lens(args) -> int:
     if not whitebox_available():
         print(
             "glassbox: the lens needs the optional white-box dependencies. "
-            'Install them with: pip install -e ".[whitebox]"',
+            'Install them with: pip install "glassbox-audit[whitebox]"',
             file=sys.stderr,
         )
         return 2

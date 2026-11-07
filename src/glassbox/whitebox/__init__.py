@@ -7,7 +7,7 @@ forms layer by layer (logit lens), and which input tokens actually move it
 in :mod:`glassbox.faithfulness`).
 
 This is the one piece that needs real model weights, so it lives behind an
-optional extra: ``pip install -e ".[whitebox]"`` (torch + transformers). The core
+optional extra: ``pip install "glassbox-audit[whitebox]"`` (torch + transformers). The core
 package stays dependency-free; import this only when you mean to.
 """
 

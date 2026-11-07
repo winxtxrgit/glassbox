@@ -46,7 +46,7 @@ Everything runs **locally and free** on [Ollama](https://ollama.com) — no API
 key, no data leaving the machine. The core is pure Python standard library.
 
 ```bash
-pip install glassbox
+pip install glassbox-audit
 glassbox audit suspicious_email.txt --model qwen2.5:3b
 ```
 
@@ -126,7 +126,7 @@ first issue, if you're reading this on GitHub.)
 ## Try it
 
 ```bash
-pip install glassbox
+pip install glassbox-audit
 ollama pull qwen2.5:3b
 glassbox demo              # no model needed — shows a fabricated citation caught
 glassbox audit email.txt   # the real thing

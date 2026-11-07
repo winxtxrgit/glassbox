@@ -3,7 +3,12 @@
 All notable changes to glassbox. Format follows [Keep a Changelog](https://keepachangelog.com);
 this project uses [semantic versioning](https://semver.org). Built over 2026-10 / 2026-11.
 
-## Unreleased
+## 0.8.0 — Benchmarks & PyPI
+
+### Changed
+- **Published on PyPI as `glassbox-audit`** (`pipx install glassbox-audit`), since
+  the `glassbox` name there belongs to an unrelated project. The import package
+  (`import glassbox`) and the `glassbox` command are unchanged.
 
 ### Added
 - **`--prompt {plain,few-shot}`** on every analysis verb (and the benchmark

@@ -1,6 +1,6 @@
 # Publishes to PyPI when a GitHub release is published, using Trusted Publishing
 # (OIDC) — no API token stored in this repository. Set up the pending publisher
-# on pypi.org first (project glassbox, owner winxtxrgit, repo glassbox, workflow
+# on pypi.org first (project glassbox-audit, owner winxtxrgit, repo glassbox, workflow
 # publish.yml, environment pypi), then publish a release to trigger this.
 name: Publish to PyPI
 
@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: pypi
-      url: https://pypi.org/project/glassbox/
+      url: https://pypi.org/project/glassbox-audit/
     permissions:
       id-token: write # Trusted Publishing
     steps:

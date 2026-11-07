@@ -163,7 +163,7 @@ def test_lens_without_extra_gives_install_hint(capsys, monkeypatch):
     # or not torch happens to be present in the environment.
     monkeypatch.setattr(cli, "whitebox_available", lambda: False)
     assert main(["lens", "hello world"]) == 2
-    assert 'pip install -e ".[whitebox]"' in capsys.readouterr().err
+    assert 'pip install "glassbox-audit[whitebox]"' in capsys.readouterr().err
 
 
 def test_prompt_few_shot_reaches_the_backend(tmp_path, monkeypatch):

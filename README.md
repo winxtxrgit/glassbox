@@ -1,6 +1,7 @@
 # glassbox
 
 [![CI](https://github.com/winxtxrgit/glassbox/actions/workflows/ci.yml/badge.svg)](https://github.com/winxtxrgit/glassbox/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/glassbox-audit?color=0e75b6)](https://pypi.org/project/glassbox-audit/)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-0e75b6)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)
 ![Runs locally](https://img.shields.io/badge/LLM-local%20%2F%20free-8957e5)
@@ -21,9 +22,11 @@ glassbox makes the explanation **auditable**: the model must quote its evidence 
 ## Try it in 10 seconds (no model, no API key, no cost)
 
 ```bash
-pip install -e .
+pipx install glassbox-audit   # or: pip install glassbox-audit
 glassbox demo
 ```
+
+The package is `glassbox-audit` on PyPI; the command and the import are `glassbox`.
 
 ```
 label:      suspicious
@@ -184,7 +187,7 @@ Exit code is `0` when the confidence is well calibrated, `1` when it's materiall
 
 ## Inside the model (white-box)
 
-Phases 1-4 only ever saw the model's output. Because the weights are local, the last phase opens a small model up. `glassbox lens` shows two classic views — install the optional extra first (`pip install -e ".[whitebox]"`, torch + transformers):
+Phases 1-4 only ever saw the model's output. Because the weights are local, the last phase opens a small model up. `glassbox lens` shows two classic views — install the optional extra first (`pip install "glassbox-audit[whitebox]"`, torch + transformers):
 
 ```bash
 glassbox lens "The Eiffel Tower is in the city of" --model gpt2
