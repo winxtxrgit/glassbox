@@ -3,6 +3,14 @@
 All notable changes to glassbox. Format follows [Keep a Changelog](https://keepachangelog.com);
 this project uses [semantic versioning](https://semver.org). Built over 2026-10 / 2026-11.
 
+## Unreleased
+
+### Added
+- **`--csv PATH`** on the benchmark runner (`benchmarks/run_benchmark.py`): also
+  writes the main table's mean values as CSV, so results are easy to chart or diff
+  across runs. Pure stdlib. ([#8](https://github.com/winxtxrgit/glassbox/pull/8),
+  thanks @teotiabhumik-ship-it)
+
 ## 0.8.0 — Benchmarks & PyPI
 
 ### Changed
