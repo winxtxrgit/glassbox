@@ -89,6 +89,21 @@ glassbox audit email.txt --backend openrouter        # defaults to a free Qwen
 glassbox audit email.txt --backend groq --model llama-3.3-70b-versatile
 ```
 
+### Other local OpenAI-compatible servers
+
+For llama.cpp, LM Studio or vLLM, select the compatible backend and give the
+server's API base URL (including `/v1`) and its model name:
+
+```bash
+glassbox triage email.txt --backend openai-compatible \
+  --base-url http://localhost:8080/v1 --model local-model
+```
+
+No key is required for an unauthenticated local server. If your server requires
+one, set `OPENAI_COMPAT_API_KEY` in the environment. Keys are never CLI arguments.
+`--base-url` can also override the OpenRouter/Groq endpoint while retaining that
+backend's model default and environment variable. Ollama continues to use `--host`.
+
 ### JSON output and whole corpora
 
 Add `--json` to any analysis command for machine-readable output you can gate a CI job on:
