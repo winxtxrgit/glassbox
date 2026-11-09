@@ -149,13 +149,13 @@ class OpenAICompatBackend:
             "response_format": {"type": "json_object"},
             "temperature": 0,
         }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         request = urllib.request.Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            },
+            headers=headers,
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:

@@ -158,13 +158,16 @@ def _add_model_args(p: argparse.ArgumentParser, *, demo_help: str | None = None)
         p.add_argument("--demo", action="store_true", help=demo_help)
     p.add_argument(
         "--backend",
-        choices=("ollama", *PROVIDERS),
+        choices=("ollama", "openai-compatible", *PROVIDERS),
         default="ollama",
         help="where the model runs: ollama (local, default), or a free API tier "
-        "(openrouter/groq) that reads <PROVIDER>_API_KEY from the environment",
+        "(openrouter/groq), or openai-compatible with --base-url and --model",
     )
     p.add_argument("--model", default=None, help="model name (default depends on backend)")
     p.add_argument("--host", default=DEFAULT_HOST, help="Ollama server URL (default: %(default)s)")
+    p.add_argument(
+        "--base-url", help="OpenAI-compatible API URL including /v1; use --host for Ollama"
+    )
     p.add_argument("--json", dest="as_json", action="store_true", help="emit JSON instead of text")
     p.add_argument(
         "--prompt",
@@ -183,7 +186,18 @@ def _policy(args) -> Policy:
 
 def _make_backend(args):
     """Build the backend named by --backend, or raise BackendError with a hint."""
+    base_url_override = getattr(args, "base_url", None)
+    if args.backend == "openai-compatible":
+        if not base_url_override or not args.model:
+            raise BackendError("--backend openai-compatible requires --base-url and --model")
+        return OpenAICompatBackend(
+            base_url_override, args.model, os.environ.get("OPENAI_COMPAT_API_KEY", "")
+        )
     if args.backend == "ollama":
+        if base_url_override:
+            raise BackendError(
+                "use --host for Ollama, or --backend openai-compatible with --base-url"
+            )
         return OllamaBackend(model=args.model or DEFAULT_MODEL, host=args.host)
     base_url, default_model, env_var = PROVIDERS[args.backend]
     key = os.environ.get(env_var)
@@ -191,7 +205,7 @@ def _make_backend(args):
         raise BackendError(
             f"set {env_var} to use --backend {args.backend} (free key from the provider)"
         )
-    return OpenAICompatBackend(base_url, args.model or default_model, key)
+    return OpenAICompatBackend(base_url_override or base_url, args.model or default_model, key)
 
 
 def _emit(args, text: str, data_fn) -> None:

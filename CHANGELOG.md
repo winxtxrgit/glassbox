@@ -6,6 +6,8 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- `--base-url` and an `openai-compatible` backend for local servers, with optional
+  authentication from `OPENAI_COMPAT_API_KEY` and no empty Bearer header (#6).
 - **`--csv PATH`** on the benchmark runner (`benchmarks/run_benchmark.py`): also
   writes the main table's mean values as CSV, so results are easy to chart or diff
   across runs. Pure stdlib. ([#8](https://github.com/winxtxrgit/glassbox/pull/8),
