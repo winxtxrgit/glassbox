@@ -135,7 +135,7 @@ Run it for real with `glassbox probe email.txt`. A model that keeps its verdict 
 
 ## Does the verdict track meaning, or surface form?
 
-A model that understands the content shouldn't change its mind when you reword the document without changing what it means. `glassbox stress` re-decides after **meaning-preserving edits** — lower-casing, whitespace reflow, a forwarding header, ASCII-normalized punctuation — and flags any edit that flips the label.
+A model that understands the content shouldn't change its mind when you reword the document without changing what it means. `glassbox stress` re-decides after **meaning-preserving edits** — lower-casing, whitespace reflow, a forwarding header, ASCII-normalized punctuation, and the narrow synonym pair `urgent` / `time-sensitive` — and flags any edit that flips the label.
 
 ```bash
 glassbox stress --demo
