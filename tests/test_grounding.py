@@ -21,6 +21,22 @@ def test_whitespace_reflow_still_locates_against_original_offsets():
     assert source[start:end] == "pay the\ninvoice"
 
 
+def test_typographic_punctuation_and_whitespace_keep_source_offsets():
+    source = "See: \u201cDon\u2019t\nstop\u2014yet\u201d."
+    quote = '"Don\'t stop-yet"'
+    assert find_span(source, quote) == (5, len(source) - 1)
+
+
+def test_straight_source_matches_typographic_quote():
+    source = "Now: don't stop."
+    assert find_span(source, "don\u2019t stop") == (5, 15)
+
+
+def test_whitespace_match_takes_precedence_over_normalized_match():
+    source = "don\u2019t stop; don't\nstop"
+    assert find_span(source, "don't stop") == (12, 22)
+
+
 def test_ground_marks_verified_and_hallucinated():
     source = "Verify your password within 24 hours."
     citations = ground(source, ["Verify your password", "click the reward link"])
