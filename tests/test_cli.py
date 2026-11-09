@@ -28,6 +28,21 @@ def test_triage_grounded_document_exits_zero(tmp_path, capsys, monkeypatch):
     assert "grounding:  OK" in capsys.readouterr().out
 
 
+
+def test_triage_from_stdin_exits_zero(capsys, monkeypatch):
+    import io
+    import glassbox.cli as cli
+
+    reply = (
+        '{"label": "suspicious", "confidence": 0.9, "rationale": "phishing",'
+        ' "evidence": ["Verify your password now"]}'
+    )
+    monkeypatch.setattr(cli, "OllamaBackend", lambda **kwargs: cli.StubBackend(reply))
+    monkeypatch.setattr("sys.stdin", io.StringIO("Verify your password now or lose access."))
+
+    assert main(["triage", "-"]) == 0
+    assert "grounding:  OK" in capsys.readouterr().out
+
 def test_triage_missing_file_errors(capsys):
     assert main(["triage", "does_not_exist.txt"]) == 2
     assert "glassbox:" in capsys.readouterr().err

@@ -215,8 +215,11 @@ def _resolve(args, demo_doc, demo_model, verb):
         print(f"glassbox: give a file to {verb}, or pass --demo", file=sys.stderr)
         return None, None
     try:
-        with open(args.file, encoding="utf-8") as handle:
-            document = handle.read()
+        if args.file == "-":
+            document = sys.stdin.read()
+        else:
+            with open(args.file, encoding="utf-8") as handle:
+                document = handle.read()
     except OSError as error:
         print(f"glassbox: {error}", file=sys.stderr)
         return None, None
@@ -236,19 +239,19 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     a = sub.add_parser("audit", help="all-in-one: grounding + faithfulness + consistency")
-    a.add_argument("file", nargs="?", help="document to audit (omit with --demo)")
+    a.add_argument("file", nargs="?", help="document to audit (omit with --demo; use - to read from stdin)")
     _add_model_args(a, demo_help="run a built-in toy model — no model needed")
 
     t = sub.add_parser("triage", help="classify a document and ground its evidence")
-    t.add_argument("file", help="path to the document to triage")
+    t.add_argument("file", help="path to the document to triage (use - to read from stdin)")
     _add_model_args(t)
 
     p = sub.add_parser("probe", help="faithfulness: erase each cited span and re-decide")
-    p.add_argument("file", nargs="?", help="document to probe (omit with --demo)")
+    p.add_argument("file", nargs="?", help="document to probe (omit with --demo; use - to read from stdin)")
     _add_model_args(p, demo_help="run a built-in toy model — no model needed")
 
     s = sub.add_parser("stress", help="consistency: re-decide after meaning-preserving edits")
-    s.add_argument("file", nargs="?", help="document to stress-test (omit with --demo)")
+    s.add_argument("file", nargs="?", help="document to stress-test (omit with --demo; use - to read from stdin)")
     _add_model_args(s, demo_help="run a built-in toy model — no model needed")
 
     c = sub.add_parser("calibrate", help="do the confidence numbers mean anything? (needs labels)")
