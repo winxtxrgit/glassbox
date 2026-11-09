@@ -6,6 +6,9 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- **`--min-trustworthy RATE`** on `batch`: set the exit-code threshold (0-1, default
+  `1.0`), so CI can fail only when fewer than e.g. 90% of documents are trustworthy.
+  ([#16](https://github.com/winxtxrgit/glassbox/issues/16))
 - **`--csv PATH`** on the benchmark runner (`benchmarks/run_benchmark.py`): also
   writes the main table's mean values as CSV, so results are easy to chart or diff
   across runs. Pure stdlib. ([#8](https://github.com/winxtxrgit/glassbox/pull/8),
