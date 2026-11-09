@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import time
 from dataclasses import replace
 from statistics import mean
@@ -33,6 +34,17 @@ from glassbox.prompts import DEFAULT_POLICY, PROMPT_STYLES
 # table (it's machine noise, not model non-determinism).
 RATE_METRICS = ("accuracy", "grounded", "faithful", "robust", "trustworthy")
 SCORE_METRICS = ("ece",)
+CSV_COLUMNS = (
+    "model",
+    "n",
+    "accuracy",
+    "grounded",
+    "faithful",
+    "robust",
+    "trustworthy",
+    "ece",
+    "latency_seconds_per_document",
+)
 
 
 def benchmark(model: str, corpus: str, host: str, prompt_style: str = "plain") -> dict:
@@ -95,6 +107,23 @@ def to_markdown(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def write_csv(rows: list[dict], path: str) -> None:
+    """Write the main table's unformatted mean values as CSV."""
+    with open(path, "w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(CSV_COLUMNS)
+        for r in rows:
+            writer.writerow(
+                [
+                    r["model"],
+                    r["n"],
+                    *(r[metric]["mean"] for metric in RATE_METRICS),
+                    r["ece"]["mean"],
+                    r["latency"]["mean"],
+                ]
+            )
+
+
 def _range(cell: dict, pct: bool) -> str:
     """Format a metric's min-max span; a stable metric collapses to a single value."""
     lo, hi = cell["min"], cell["max"]
@@ -120,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--models", required=True, help="comma-separated Ollama model tags")
     parser.add_argument("--corpus", default="benchmarks/corpus.jsonl", help="JSON Lines corpus")
     parser.add_argument("--host", default="http://localhost:11434", help="Ollama server URL")
+    parser.add_argument("--csv", help="also write the main table rows to this CSV file")
     parser.add_argument(
         "--runs", type=int, default=1, help="evaluate each model this many times (default 1)"
     )
@@ -149,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.runs > 1:
         print()
         print(to_spread_markdown(rows))
+    if args.csv:
+        write_csv(rows, args.csv)
     return 0
 
 

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import csv
 import importlib.util
 from pathlib import Path
 
@@ -60,6 +61,27 @@ def test_to_markdown_shows_the_mean():
     md = rb.to_markdown([agg])
     assert "`m`" in md
     assert "80%" in md  # mean of 0.9 and 0.7
+
+
+def test_main_writes_csv_with_expected_header(tmp_path, monkeypatch):
+    monkeypatch.setattr(rb, "benchmark", lambda model, corpus, host, prompt_style: _run(model))
+    csv_path = tmp_path / "results.csv"
+
+    assert rb.main(["--models", "m", "--csv", str(csv_path)]) == 0
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.reader(csv_file))
+    assert rows[0] == [
+        "model",
+        "n",
+        "accuracy",
+        "grounded",
+        "faithful",
+        "robust",
+        "trustworthy",
+        "ece",
+        "latency_seconds_per_document",
+    ]
 
 
 def test_range_formatting():
