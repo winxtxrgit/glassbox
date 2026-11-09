@@ -6,6 +6,8 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- An ASCII reliability diagram below the calibration table compares mean confidence
+  and observed accuracy on a shared percentage scale (#4).
 - **`--csv PATH`** on the benchmark runner (`benchmarks/run_benchmark.py`): also
   writes the main table's mean values as CSV, so results are easy to chart or diff
   across runs. Pure stdlib. ([#8](https://github.com/winxtxrgit/glassbox/pull/8),

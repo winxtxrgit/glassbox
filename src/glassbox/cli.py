@@ -380,6 +380,23 @@ def _render_consistency(report: ConsistencyReport) -> str:
     return "\n".join(lines)
 
 
+def _render_reliability_diagram(report: CalibrationReport) -> str:
+    """Place observed accuracy and mean confidence on a shared 0-100% scale."""
+    width = 20
+    lines = [
+        "reliability diagram (C = mean confidence, A = accuracy, * = both):",
+        "             0%        50%       100%",
+    ]
+    for row in report.reliability():
+        confidence = round(row.avg_confidence * width)
+        accuracy = round(row.accuracy * width)
+        scale = ["."] * (width + 1)
+        scale[confidence] = "C"
+        scale[accuracy] = "*" if confidence == accuracy else "A"
+        lines.append(f"  {row.low:.2f}-{row.high:.2f} |{''.join(scale)}|")
+    return "\n".join(lines)
+
+
 def _render_calibration(report: CalibrationReport) -> str:
     skipped = f" ({report.errors} skipped: unparseable)" if report.errors else ""
     lines = [f"calibration over {report.n} example(s){skipped}:", ""]
@@ -403,7 +420,7 @@ def _render_calibration(report: CalibrationReport) -> str:
             f"| said {row.avg_confidence:.2f} | right {row.accuracy:.2f}"
         )
 
-    lines.append("")
+    lines.extend(["", _render_reliability_diagram(report), ""])
     if report.overconfident:
         lines.append(
             f"verdict:    OVERCONFIDENT - it claims {report.mean_confidence:.2f} but is right "
