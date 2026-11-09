@@ -156,6 +156,13 @@ Here the toy model was reading letter case, not content — so lower-casing alon
 
 The edit set is **multilingual**: alongside the English edits above there are Thai ones — Thai numerals to Arabic (`๒๔` → `24`) and dropping politeness particles (`ครับ`/`ค่ะ`) — that surface a verdict keying on Thai surface form. Each edit is a no-op on text it doesn't apply to, so it never counts against a document in another language. There's a labelled Thai sample at `examples/thai.jsonl`.
 
+`examples/chinese.jsonl` adds six synthetic Simplified Chinese messages, balanced
+between three suspicious messages (phishing / business email compromise) and
+three benign messages. Each row includes `id`, `document`, `label` and `category`.
+Try `glassbox calibrate examples/chinese.jsonl` or `glassbox batch examples/chinese.jsonl`
+with your configured backend. This small example corpus exercises the workflow;
+it is not a validated benchmark of Chinese-language model performance.
+
 ## Do the confidence numbers mean anything?
 
 A verdict comes with a confidence like `0.90`. Is that a probability, or decoration? `glassbox calibrate` needs a **labelled set** — documents whose true labels you know — and checks whether stated confidence matches observed accuracy. The headline is **ECE** (expected calibration error): bin predictions by confidence and compare each bin's average confidence to how often it was actually right.
