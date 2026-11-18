@@ -153,6 +153,19 @@ def _calib_demo_model(system: str, user: str) -> str:
 # ----------------------------------------------------------------------------
 
 
+def _rate(value: str) -> float:
+    """A pass-rate threshold in 0-1, rejected by argparse with a clear message otherwise."""
+    try:
+        rate = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"invalid rate {value!r}: expected a number in 0-1"
+        ) from None
+    if not 0.0 <= rate <= 1.0:
+        raise argparse.ArgumentTypeError(f"rate must be between 0 and 1, got {value}")
+    return rate
+
+
 def _add_model_args(p: argparse.ArgumentParser, *, demo_help: str | None = None) -> None:
     if demo_help:
         p.add_argument("--demo", action="store_true", help=demo_help)
@@ -260,6 +273,14 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("batch", help="audit a whole corpus and report the pass rates")
     b.add_argument("corpus", nargs="?", help="JSON Lines of {'document'} (omit with --demo)")
     _add_model_args(b, demo_help="run a built-in corpus and toy model — no model needed")
+    b.add_argument(
+        "--min-trustworthy",
+        type=_rate,
+        default=1.0,
+        metavar="RATE",
+        help="exit 0 when at least this fraction of documents is trustworthy, "
+        "0-1 (default: %(default)s)",
+    )
 
     lens = sub.add_parser(
         "lens",
@@ -616,7 +637,7 @@ def _cmd_batch(args) -> int:
         print(f"glassbox: {error}", file=sys.stderr)
         return 2
     _emit(args, _render_batch(report), lambda: batch_dict(report))
-    return 0 if report.n > 0 and report.trustworthy_rate == 1.0 else 1
+    return 0 if report.n > 0 and report.trustworthy_rate >= args.min_trustworthy else 1
 
 
 def _cmd_lens(args) -> int:

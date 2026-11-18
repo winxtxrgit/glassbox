@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from glassbox.cli import main
 
 
@@ -141,6 +143,21 @@ def test_batch_demo_reports_pass_rates(capsys):
     assert "grounded:" in out
     assert "100%" in out  # grounded on all demo docs
     assert "0%" in out  # robust on none
+
+
+def test_batch_min_trustworthy_sets_the_exit_code(capsys):
+    # The demo corpus is trustworthy on 0% of its documents, so 0 passes and 1.0 fails.
+    assert main(["batch", "--demo", "--min-trustworthy", "0"]) == 0
+    assert main(["batch", "--demo", "--min-trustworthy", "1.0"]) == 1
+    capsys.readouterr()
+
+
+def test_batch_min_trustworthy_rejects_values_outside_0_to_1(capsys):
+    for value in ("1.5", "-0.1", "high"):
+        with pytest.raises(SystemExit) as exit_info:
+            main(["batch", "--demo", "--min-trustworthy", value])
+        assert exit_info.value.code == 2
+    assert "rate must be between 0 and 1" in capsys.readouterr().err
 
 
 def test_batch_without_corpus_or_demo_errors(capsys):
