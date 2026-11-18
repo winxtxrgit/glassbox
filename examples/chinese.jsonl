@@ -1,0 +1,6 @@
+{"id": "zh-phish-01", "document": "发件人：账户服务 <account@secure-bank.example>\n主题：账户即将停用\n请在24小时内访问 https://secure-bank.example/verify 并输入密码，否则您的账户将被停用。", "label": "suspicious", "category": "phishing"}
+{"id": "zh-phish-02", "document": "我是总经理，正在开会。请立即将五万元货款汇入这个新账户，不要打电话核实，也不要告诉其他同事。", "label": "suspicious", "category": "bec"}
+{"id": "zh-phish-03", "document": "您的快递因地址不全被扣留。请点击 http://parcel-redelivery.example 补交2元手续费，并填写银行卡号和验证码，逾期销毁包裹。", "label": "suspicious", "category": "phishing"}
+{"id": "zh-benign-01", "document": "各位同事，第三季度的项目总结已上传到内部共享文件夹，请在周五例会前阅读，并在原文中留下意见。谢谢！", "label": "benign", "category": "business"}
+{"id": "zh-benign-02", "document": "行政通知：办公室下周一因公共假期关闭，周二恢复正常办公。祝大家假期愉快。", "label": "benign", "category": "notice"}
+{"id": "zh-benign-03", "document": "你好，能在方便的时候把最新的设计稿发给我吗？不着急，我们下周讨论。今天中午还是老地方吃饭。", "label": "benign", "category": "personal"}
