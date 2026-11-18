@@ -50,6 +50,21 @@ def _normalize_punctuation(text: str) -> str:
     return text
 
 
+def _swap_synonyms(text: str) -> str:
+    """Swap one narrow urgency synonym pair without matching inside words."""
+
+    def replace(match: re.Match[str]) -> str:
+        term = match.group()
+        replacement = "time-sensitive" if term.lower() == "urgent" else "urgent"
+        if term.isupper():
+            return replacement.upper()
+        if term[0].isupper():
+            return replacement.capitalize()
+        return replacement
+
+    return re.sub(r"\b(?:urgent|time-sensitive)\b", replace, text, flags=re.IGNORECASE)
+
+
 # --- Thai-language edits (no-ops on non-Thai text, so they're safe as defaults) ---
 
 _THAI_DIGITS = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
@@ -83,6 +98,7 @@ DEFAULT_PERTURBATIONS: tuple[Perturbation, ...] = (
     Perturbation(
         "normalize punctuation", "smart quotes and dashes to ASCII", _normalize_punctuation
     ),
+    Perturbation("swap synonyms", "swap urgent and time-sensitive wording", _swap_synonyms),
     Perturbation("thai numerals", "Thai digits to Arabic (๒๔ -> 24)", _thai_numerals),
     Perturbation(
         "drop thai particles", "strip politeness particles (ครับ/ค่ะ)", _drop_thai_particles
