@@ -12,14 +12,15 @@ import re
 
 from .schema import Citation
 
+_PUNCTUATION = str.maketrans("‘’“”–—", "''\"\"--")
+
 
 def find_span(source: str, quote: str) -> tuple[int, int]:
     """Return the ``(start, end)`` offsets of *quote* in *source*, or ``(-1, -1)``.
 
-    Tries an exact match first, then a whitespace-flexible match so a quote that
-    only differs by re-wrapped spaces or newlines still resolves to real offsets
-    (the flexible pattern is searched against the original text, so the returned
-    span always indexes the untouched source).
+    Tries an exact match, then flexible whitespace, then flexible whitespace
+    with curly quotes and typographic dashes normalized. Each punctuation
+    replacement preserves character offsets in the original source.
     """
     q = quote.strip()
     if not q:
@@ -33,6 +34,11 @@ def find_span(source: str, quote: str) -> tuple[int, int]:
     # whitespace between them. Run on the original source to keep offsets honest.
     pattern = re.compile(r"\s+".join(re.escape(word) for word in q.split()))
     match = pattern.search(source)
+    if match:
+        return (match.start(), match.end())
+
+    pattern = re.compile(r"\s+".join(re.escape(word) for word in q.translate(_PUNCTUATION).split()))
+    match = pattern.search(source.translate(_PUNCTUATION))
     if match:
         return (match.start(), match.end())
 
