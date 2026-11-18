@@ -6,6 +6,25 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- **`--min-trustworthy RATE`** on `batch`: the pass rate (0–1, default `1.0`)
+  the corpus needs for exit code 0, so CI can fail only when, say, fewer than 90%
+  of documents are trustworthy. ([#20](https://github.com/winxtxrgit/glassbox/pull/20), thanks @bfs2021)
+- **`--base-url`** and an **`openai-compatible`** backend for local servers
+  (llama.cpp, LM Studio, vLLM). An optional key comes from `OPENAI_COMPAT_API_KEY`,
+  and no empty `Authorization` header is sent without one. `--base-url` also
+  overrides the OpenRouter/Groq endpoint. ([#13](https://github.com/winxtxrgit/glassbox/pull/13), thanks @yinbowen-dc)
+- **ASCII reliability diagram** under the `calibrate` table: mean confidence (`C`)
+  and observed accuracy (`A`) per bin on a shared 0–100% scale. ([#12](https://github.com/winxtxrgit/glassbox/pull/12),
+  thanks @yinbowen-dc)
+- **Synonym consistency edit**: swaps whole-word `urgent` ↔ `time-sensitive`,
+  keeping capitalization, and reuses the original verdict when neither word
+  appears. ([#11](https://github.com/winxtxrgit/glassbox/pull/11), thanks @yinbowen-dc)
+- **Grounding tolerates typographic punctuation**: a quote that differs from the
+  document only by curly quotes or en/em dashes (and line wrapping) now resolves
+  to the original offsets. ([#19](https://github.com/winxtxrgit/glassbox/pull/19), thanks @jeelthacker1)
+- `examples/chinese.jsonl`: six labelled Simplified Chinese messages (three
+  suspicious, three benign), with a grounding test on Chinese text.
+  ([#14](https://github.com/winxtxrgit/glassbox/pull/14), thanks @yinbowen-dc)
 - **`--csv PATH`** on the benchmark runner (`benchmarks/run_benchmark.py`): also
   writes the main table's mean values as CSV, so results are easy to chart or diff
   across runs. Pure stdlib. ([#8](https://github.com/winxtxrgit/glassbox/pull/8),
