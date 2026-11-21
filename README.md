@@ -77,6 +77,13 @@ Bigger and sharper if your hardware allows: `qwen2.5:7b`, `qwen3:4b`. Point at a
 glassbox triage report.txt --model qwen3:4b --host http://localhost:11434
 ```
 
+Pass `-` as the file to read the document from stdin:
+
+```bash
+pbpaste | glassbox audit - --model qwen2.5:3b
+curl -s https://example.com/mail.txt | glassbox triage -
+```
+
 Exit code is `0` when the verdict is grounded, `1` when it isn't — so you can gate a pipeline on *faithfulness*, not just on the label.
 
 ### No GPU? Use a free API tier

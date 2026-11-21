@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+
 import pytest
 
 from glassbox.cli import main
@@ -28,6 +30,32 @@ def test_triage_grounded_document_exits_zero(tmp_path, capsys, monkeypatch):
 
     assert main(["triage", str(doc)]) == 0
     assert "grounding:  OK" in capsys.readouterr().out
+
+
+def test_triage_reads_document_from_stdin_when_file_is_dash(capsys, monkeypatch):
+    import glassbox.cli as cli
+
+    reply = (
+        '{"label": "suspicious", "confidence": 0.9, "rationale": "phishing",'
+        ' "evidence": ["Verify your password now"]}'
+    )
+    monkeypatch.setattr(cli, "OllamaBackend", lambda **kwargs: cli.StubBackend(reply))
+    monkeypatch.setattr("sys.stdin", io.StringIO("Verify your password now or lose access."))
+
+    assert main(["triage", "-"]) == 0
+    assert "grounding:  OK" in capsys.readouterr().out
+
+
+def test_stdin_bytes_are_decoded_as_utf8(monkeypatch):
+    # A real stdin has a byte buffer; decode it as UTF-8 (not the console code
+    # page) so Thai text piped in on Windows matches the cited evidence.
+    from glassbox.cli import _read_document
+
+    thai = "ยืนยันรหัสผ่านของคุณ"
+    stdin = io.TextIOWrapper(io.BytesIO(thai.encode("utf-8")), encoding="cp1252")
+    monkeypatch.setattr("sys.stdin", stdin)
+
+    assert _read_document("-") == thai
 
 
 def test_triage_missing_file_errors(capsys):

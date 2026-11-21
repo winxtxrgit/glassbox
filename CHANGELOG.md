@@ -6,6 +6,9 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- **Read the document from stdin** when the file is `-`, on `audit`, `triage`,
+  `probe` and `stress` (`pbpaste | glassbox audit -`). Stdin is decoded as UTF-8,
+  like a file. ([#15](https://github.com/winxtxrgit/glassbox/issues/15))
 - **`--min-trustworthy RATE`** on `batch`: the pass rate (0–1, default `1.0`)
   the corpus needs for exit code 0, so CI can fail only when, say, fewer than 90%
   of documents are trustworthy. ([#20](https://github.com/winxtxrgit/glassbox/pull/20), thanks @bfs2021)
