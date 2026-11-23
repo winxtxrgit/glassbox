@@ -32,6 +32,31 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
   writes the main table's mean values as CSV, so results are easy to chart or diff
   across runs. Pure stdlib. ([#8](https://github.com/winxtxrgit/glassbox/pull/8),
   thanks @teotiabhumik-ship-it)
+- **`glassbox serve`**: audit and triage over HTTP, standard library only. A
+  phone-friendly page at `/` and a job API (`POST /api/jobs`, poll
+  `GET /api/jobs/<id>`; results are the `--json` payloads) with one worker
+  thread, because an audit on slow hardware takes minutes. Binds to localhost
+  unless `--bind` says otherwise; `GLASSBOX_TOKEN` enables bearer auth (constant-time
+  compare), and it warns when exposed without one. Bodies are capped at 64 KB,
+  the queue is bounded (`--max-queue`, 429 when full), finished jobs are
+  evicted and submitted text is dropped once a job ends. The page renders the
+  (untrusted) quoted evidence with `textContent` only, under a nonce CSP.
+  `serve --demo` runs it on the toy model.
+- **`deploy/raspberry-pi/`**: idempotent `setup-pi.sh` that turns a Pi 5 into a
+  LAN glassbox server: Ollama (LAN-only, one request at a time), qwen2.5
+  1.5b/3b, ufw (SSH allowed before enabling), a generated token and a hardened
+  `glassbox.service`, then runs a smoke test.
+- **`--timeout SECONDS`** on every analysis verb (and the benchmark runner): how
+  long to wait for each model reply, default 120. Slow hardware — CPU-only
+  machines, a Raspberry Pi, a cold model load — can need several minutes.
+- **`GLASSBOX_HOST`** environment variable sets the default Ollama URL (for the
+  CLI and the benchmark runner), so a model on another machine on your LAN
+  doesn't need `--host` on every command. An explicit `--host` still wins.
+
+### Fixed
+- A backend timeout is now reported as a timeout ("no reply from … within Ns …
+  retry with a larger --timeout") instead of "unreadable reply", and an
+  unreachable server is still told apart from a slow one.
 
 ## 0.8.0 — Benchmarks & PyPI
 

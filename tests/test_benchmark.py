@@ -126,3 +126,16 @@ def test_main_with_csv_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     assert rows[0] == list(rb.CSV_HEADER)
     assert rows[1][0] == "mock-model"
     assert rows[1][2] == "0.95"
+
+
+def test_main_passes_host_env_and_timeout_through(monkeypatch, capsys):
+    monkeypatch.setenv("GLASSBOX_HOST", "http://192.168.1.62:11434")
+    calls = []
+
+    def fake_benchmark(model, corpus, host, prompt_style="plain", timeout=None):
+        calls.append((model, host, timeout))
+        return _run(model, accuracy=1, grounded=1, faithful=1, robust=1, trustworthy=1)
+
+    monkeypatch.setattr(rb, "benchmark", fake_benchmark)
+    assert rb.main(["--models", "qwen2.5:1.5b", "--timeout", "600"]) == 0
+    assert calls == [("qwen2.5:1.5b", "http://192.168.1.62:11434", 600.0)]

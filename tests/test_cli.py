@@ -233,3 +233,74 @@ def test_prompt_few_shot_reaches_the_backend(tmp_path, monkeypatch):
     assert "EXAMPLE 1" not in seen["system"]
     assert main(["triage", str(doc), "--prompt", "few-shot"]) == 0
     assert "EXAMPLE 1" in seen["system"] and "EXAMPLE 2" in seen["system"]
+
+
+_GROUNDED_REPLY = (
+    '{"label": "suspicious", "confidence": 0.9, "rationale": "x",'
+    ' "evidence": ["Verify your password now"]}'
+)
+
+
+def _capture_ollama_kwargs(monkeypatch) -> dict:
+    """Replace OllamaBackend with a stub that records how the CLI constructed it."""
+    import glassbox.cli as cli
+
+    seen: dict = {}
+
+    def factory(**kwargs):
+        seen.update(kwargs)
+        return cli.StubBackend(_GROUNDED_REPLY)
+
+    monkeypatch.setattr(cli, "OllamaBackend", factory)
+    return seen
+
+
+def test_host_and_timeout_defaults(tmp_path, monkeypatch):
+    monkeypatch.delenv("GLASSBOX_HOST", raising=False)
+    seen = _capture_ollama_kwargs(monkeypatch)
+    doc = tmp_path / "m.txt"
+    doc.write_text("Verify your password now.")
+
+    assert main(["triage", str(doc)]) == 0
+    assert seen["host"] == "http://localhost:11434"
+    assert seen["timeout"] == 120.0
+
+
+def test_glassbox_host_env_sets_the_default_host(tmp_path, monkeypatch):
+    # e.g. a Raspberry Pi on the LAN, so --host needn't be typed every time.
+    monkeypatch.setenv("GLASSBOX_HOST", "http://192.168.1.62:11434")
+    seen = _capture_ollama_kwargs(monkeypatch)
+    doc = tmp_path / "m.txt"
+    doc.write_text("Verify your password now.")
+
+    assert main(["triage", str(doc)]) == 0
+    assert seen["host"] == "http://192.168.1.62:11434"
+
+
+def test_explicit_host_flag_beats_the_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("GLASSBOX_HOST", "http://192.168.1.62:11434")
+    seen = _capture_ollama_kwargs(monkeypatch)
+    doc = tmp_path / "m.txt"
+    doc.write_text("Verify your password now.")
+
+    assert main(["triage", str(doc), "--host", "http://other:11434"]) == 0
+    assert seen["host"] == "http://other:11434"
+
+
+def test_timeout_flag_reaches_the_backend(tmp_path, monkeypatch):
+    seen = _capture_ollama_kwargs(monkeypatch)
+    doc = tmp_path / "m.txt"
+    doc.write_text("Verify your password now.")
+
+    assert main(["audit", str(doc), "--timeout", "600"]) in (0, 1)
+    assert seen["timeout"] == 600.0
+
+
+def test_timeout_flag_rejects_non_positive_values(capsys):
+    import pytest
+
+    for bad in ("0", "-5", "abc", "nan"):
+        with pytest.raises(SystemExit) as exc:
+            main(["triage", "x.txt", "--timeout", bad])
+        assert exc.value.code == 2
+    assert "--timeout" in capsys.readouterr().err

@@ -37,6 +37,25 @@ PROVIDERS: dict[str, tuple[str, str, str]] = {
 }
 
 
+DEFAULT_TIMEOUT = 120.0
+
+
+def _is_timeout(error: BaseException) -> bool:
+    """True if a urllib failure was a timeout (raw, or wrapped in URLError)."""
+    if isinstance(error, TimeoutError):
+        return True
+    return isinstance(error, urllib.error.URLError) and isinstance(error.reason, TimeoutError)
+
+
+def _timeout_message(where: str, timeout: float) -> str:
+    # A timeout on slow hardware (CPU-only, a Raspberry Pi, a cold model load) is
+    # not a dead server -- say so, and name the knob, instead of "unreadable reply".
+    return (
+        f"no reply from {where} within {timeout:g}s. The model may just be slow on "
+        "this hardware or still loading; retry with a larger --timeout."
+    )
+
+
 class BackendError(RuntimeError):
     """The backend could not produce a response (unreachable, timeout, bad reply)."""
 
@@ -84,7 +103,7 @@ class OllamaBackend:
         self,
         model: str = DEFAULT_MODEL,
         host: str = DEFAULT_HOST,
-        timeout: float = 120.0,
+        timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         self.model = model
         self.host = host.rstrip("/")
@@ -109,7 +128,9 @@ class OllamaBackend:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 body = json.loads(response.read().decode())
-        except urllib.error.URLError as error:
+        except (TimeoutError, urllib.error.URLError) as error:
+            if _is_timeout(error):
+                raise BackendError(_timeout_message(self.host, self.timeout)) from None
             raise BackendError(
                 f"cannot reach Ollama at {self.host} ({error}). "
                 "Install it from https://ollama.com, then run "
@@ -133,7 +154,9 @@ class OpenAICompatBackend:
     class never prompts for or stores it beyond the instance.
     """
 
-    def __init__(self, base_url: str, model: str, api_key: str, timeout: float = 120.0) -> None:
+    def __init__(
+        self, base_url: str, model: str, api_key: str, timeout: float = DEFAULT_TIMEOUT
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
@@ -163,7 +186,9 @@ class OpenAICompatBackend:
         except urllib.error.HTTPError as error:
             detail = error.read().decode(errors="replace")[:200]
             raise BackendError(f"{self.base_url} returned HTTP {error.code}: {detail}") from None
-        except urllib.error.URLError as error:
+        except (TimeoutError, urllib.error.URLError) as error:
+            if _is_timeout(error):
+                raise BackendError(_timeout_message(self.base_url, self.timeout)) from None
             raise BackendError(f"cannot reach {self.base_url}: {error}") from None
         except (OSError, json.JSONDecodeError) as error:
             raise BackendError(f"unreadable reply from {self.base_url}: {error}") from None

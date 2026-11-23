@@ -1,0 +1,31 @@
+# Installed by setup-pi.sh as /etc/systemd/system/glassbox.service
+# @USER@, @HOME@ and @MODEL@ are filled in by the script.
+[Unit]
+Description=glassbox audit server (web page + job API)
+After=network-online.target ollama.service
+Wants=network-online.target
+Requires=ollama.service
+
+[Service]
+User=@USER@
+# Holds GLASSBOX_TOKEN (root-owned, mode 600; systemd reads it before dropping to @USER@).
+EnvironmentFile=/etc/glassbox.env
+ExecStart=@HOME@/.local/bin/glassbox serve --bind 0.0.0.0 --port 8787 --model @MODEL@ --host http://127.0.0.1:11434 --timeout 900
+Restart=on-failure
+RestartSec=5
+
+# Hardening: the server only needs to read its own install and talk to the network.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

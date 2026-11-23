@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import time
 from dataclasses import replace
 from pathlib import Path
 from statistics import mean
 
-from glassbox.backends import OllamaBackend
+from glassbox.backends import DEFAULT_HOST, DEFAULT_TIMEOUT, OllamaBackend
 from glassbox.batch import load_documents, run_batch
 from glassbox.calibration import evaluate, load_dataset
 from glassbox.prompts import DEFAULT_POLICY, PROMPT_STYLES
@@ -49,9 +50,15 @@ CSV_HEADER = (
 )
 
 
-def benchmark(model: str, corpus: str, host: str, prompt_style: str = "plain") -> dict:
+def benchmark(
+    model: str,
+    corpus: str,
+    host: str,
+    prompt_style: str = "plain",
+    timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
     """Run both lenses on *model* over *corpus* once and return the aggregate metrics."""
-    backend = OllamaBackend(model=model, host=host)
+    backend = OllamaBackend(model=model, host=host, timeout=timeout)
     policy = replace(DEFAULT_POLICY, prompt_style=prompt_style)
     documents = load_documents(corpus)
     dataset = load_dataset(corpus)
@@ -156,7 +163,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Benchmark glassbox across models (Ollama).")
     parser.add_argument("--models", required=True, help="comma-separated Ollama model tags")
     parser.add_argument("--corpus", default="benchmarks/corpus.jsonl", help="JSON Lines corpus")
-    parser.add_argument("--host", default="http://localhost:11434", help="Ollama server URL")
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("GLASSBOX_HOST") or DEFAULT_HOST,
+        help="Ollama server URL (default: $GLASSBOX_HOST if set, else %(default)s)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_TIMEOUT,
+        help="seconds to wait per model reply (default %(default)g); raise on a Pi/CPU box",
+    )
     parser.add_argument(
         "--runs", type=int, default=1, help="evaluate each model this many times (default 1)"
     )
@@ -172,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.runs < 1:
         parser.error("--runs must be at least 1")
+    if not args.timeout > 0:
+        parser.error("--timeout must be > 0")
 
     rows = []
     for model in (m.strip() for m in args.models.split(",") if m.strip()):
@@ -179,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         for i in range(args.runs):
             suffix = f" (run {i + 1}/{args.runs})" if args.runs > 1 else ""
             print(f"# benchmarking {model} [{args.prompt}]{suffix} ...", flush=True)
-            runs.append(benchmark(model, args.corpus, args.host, args.prompt))
+            runs.append(benchmark(model, args.corpus, args.host, args.prompt, args.timeout))
         rows.append(aggregate(runs))
 
     print()

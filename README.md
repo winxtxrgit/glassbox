@@ -86,6 +86,28 @@ curl -s https://example.com/mail.txt | glassbox triage -
 
 Exit code is `0` when the verdict is grounded, `1` when it isn't — so you can gate a pipeline on *faithfulness*, not just on the label.
 
+### Run the model on another machine
+
+The model doesn't have to live on the machine you type on — e.g. a Raspberry Pi 5 or a desktop with a GPU on your LAN. Start Ollama there with `OLLAMA_HOST=0.0.0.0:11434`, then point glassbox at it once:
+
+```bash
+export GLASSBOX_HOST=http://raspberrypi.local:11434   # PowerShell: $env:GLASSBOX_HOST="..."
+glassbox audit email.txt --model qwen2.5:1.5b --timeout 600
+```
+
+`--host` still overrides the variable for a single run. `--timeout` (default 120 s) is how long to wait for **each** model reply; CPU-only boxes and cold model loads can need several minutes, and a timeout is reported as such (with this hint) rather than as a dead server. Ollama has no authentication — keep port 11434 firewalled to your LAN and never forward it to the internet.
+
+### Server mode: a web page and job API (e.g. on a Raspberry Pi)
+
+```bash
+export GLASSBOX_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(24))")
+glassbox serve --bind 0.0.0.0 --model qwen2.5:1.5b --timeout 900
+# open http://<this-machine>:8787/ on any device on the LAN
+glassbox serve --demo        # try the page with the built-in toy model, no Ollama needed
+```
+
+Audits make many model calls, so requests are jobs: `POST /api/jobs` returns an id at once, `GET /api/jobs/<id>` returns the result (the same JSON as `--json`) when it's done. One worker runs them in order. [`deploy/raspberry-pi/`](deploy/raspberry-pi/) has a one-command setup that installs Ollama, the models, a firewall and a hardened systemd service on a Pi 5.
+
 ### No GPU? Use a free API tier
 
 Every command also runs against an OpenAI-compatible free tier — no local model needed. Set the provider's key in your environment and pass `--backend`:
@@ -313,7 +335,7 @@ Five lenses on **interpretability of (mostly black-box) LLMs** — all five buil
 
 ## Security & trust boundary
 
-glassbox is a local command-line tool: it runs on your machine, on files you point it at, against a model you choose. It opens no network listener and deserializes nothing untrusted. A few things worth knowing:
+glassbox is a local command-line tool: it runs on your machine, on files you point it at, against a model you choose. It deserializes nothing untrusted, and it opens no network listener **unless you run `glassbox serve`**, which binds to `127.0.0.1` by default; serving your LAN takes an explicit `--bind 0.0.0.0`, and you should set `GLASSBOX_TOKEN` when you do (the command warns if you don't). The server takes text only (never paths), caps bodies and the queue, and its page renders model output — which quotes the possibly-hostile document — with `textContent` under a strict CSP. It is meant for a trusted LAN, not the open internet. A few more things worth knowing:
 
 - **Models are loaded from safetensors only.** `glassbox lens` passes `use_safetensors=True` and leaves `trust_remote_code` at its safe default (`False`), so a model name can't execute code through pickle weights or custom modeling files. Still, only point `--model` at models you trust.
 - **Free API backends send your document to a third party.** With `--backend openrouter` / `--backend groq`, the document (and system prompt) leave your machine and may be logged or trained on by the provider. For sensitive emails or logs, use the local Ollama backend instead — the text never leaves your machine.

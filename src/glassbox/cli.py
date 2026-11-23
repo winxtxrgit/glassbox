@@ -19,7 +19,9 @@ import argparse
 import contextlib
 import json
 import os
+import signal
 import sys
+import threading
 from dataclasses import replace
 
 from . import __version__
@@ -27,6 +29,7 @@ from .audit import AuditReport, audit
 from .backends import (
     DEFAULT_HOST,
     DEFAULT_MODEL,
+    DEFAULT_TIMEOUT,
     PROVIDERS,
     BackendError,
     CallableBackend,
@@ -54,6 +57,15 @@ from .serialize import (
     faithfulness_dict,
     lens_dict,
     verdict_dict,
+)
+from .server import (
+    DEFAULT_BIND,
+    DEFAULT_MAX_QUEUE,
+    DEFAULT_PORT,
+    TOKEN_ENV,
+    AuditService,
+    is_loopback,
+    make_server,
 )
 from .triage import TriageError, triage
 from .whitebox import LensResult
@@ -153,6 +165,10 @@ def _calib_demo_model(system: str, user: str) -> str:
 # ----------------------------------------------------------------------------
 
 
+# Point every command at a remote Ollama (e.g. a Pi on the LAN) without typing --host.
+HOST_ENV = "GLASSBOX_HOST"
+
+
 def _rate(value: str) -> float:
     """A pass-rate threshold in 0-1, rejected by argparse with a clear message otherwise."""
     try:
@@ -166,7 +182,19 @@ def _rate(value: str) -> float:
     return rate
 
 
-def _add_model_args(p: argparse.ArgumentParser, *, demo_help: str | None = None) -> None:
+def _positive_seconds(value: str) -> float:
+    try:
+        seconds = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {value!r}") from None
+    if not seconds > 0:  # also rejects nan
+        raise argparse.ArgumentTypeError(f"must be > 0, got {value!r}")
+    return seconds
+
+
+def _add_model_args(
+    p: argparse.ArgumentParser, *, demo_help: str | None = None, json_flag: bool = True
+) -> None:
     if demo_help:
         p.add_argument("--demo", action="store_true", help=demo_help)
     p.add_argument(
@@ -177,11 +205,27 @@ def _add_model_args(p: argparse.ArgumentParser, *, demo_help: str | None = None)
         "(openrouter/groq), or openai-compatible with --base-url and --model",
     )
     p.add_argument("--model", default=None, help="model name (default depends on backend)")
-    p.add_argument("--host", default=DEFAULT_HOST, help="Ollama server URL (default: %(default)s)")
+    p.add_argument(
+        "--host",
+        default=os.environ.get(HOST_ENV) or DEFAULT_HOST,
+        help=f"Ollama server URL, e.g. a Raspberry Pi on your LAN (default: ${HOST_ENV} "
+        "if set, else %(default)s)",
+    )
     p.add_argument(
         "--base-url", help="OpenAI-compatible API URL including /v1; use --host for Ollama"
     )
-    p.add_argument("--json", dest="as_json", action="store_true", help="emit JSON instead of text")
+    p.add_argument(
+        "--timeout",
+        type=_positive_seconds,
+        default=DEFAULT_TIMEOUT,
+        metavar="SECONDS",
+        help="how long to wait for each model reply (default: %(default)gs); raise it "
+        "for slow hardware such as CPU-only machines or a Raspberry Pi",
+    )
+    if json_flag:
+        p.add_argument(
+            "--json", dest="as_json", action="store_true", help="emit JSON instead of text"
+        )
     p.add_argument(
         "--prompt",
         choices=PROMPT_STYLES,
@@ -204,21 +248,28 @@ def _make_backend(args):
         if not base_url_override or not args.model:
             raise BackendError("--backend openai-compatible requires --base-url and --model")
         return OpenAICompatBackend(
-            base_url_override, args.model, os.environ.get("OPENAI_COMPAT_API_KEY", "")
+            base_url_override,
+            args.model,
+            os.environ.get("OPENAI_COMPAT_API_KEY", ""),
+            timeout=args.timeout,
         )
     if args.backend == "ollama":
         if base_url_override:
             raise BackendError(
                 "use --host for Ollama, or --backend openai-compatible with --base-url"
             )
-        return OllamaBackend(model=args.model or DEFAULT_MODEL, host=args.host)
+        return OllamaBackend(
+            model=args.model or DEFAULT_MODEL, host=args.host, timeout=args.timeout
+        )
     base_url, default_model, env_var = PROVIDERS[args.backend]
     key = os.environ.get(env_var)
     if not key:
         raise BackendError(
             f"set {env_var} to use --backend {args.backend} (free key from the provider)"
         )
-    return OpenAICompatBackend(base_url_override or base_url, args.model or default_model, key)
+    return OpenAICompatBackend(
+        base_url_override or base_url, args.model or default_model, key, timeout=args.timeout
+    )
 
 
 def _emit(args, text: str, data_fn) -> None:
@@ -325,6 +376,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("demo", help="run a built-in example — no model needed")
+
+    sv = sub.add_parser(
+        "serve",
+        help="HTTP API + web page for audits (e.g. on a Raspberry Pi on your LAN)",
+        description="Serve audit/triage over HTTP: a web page at / and a job API at "
+        f"/api/jobs. Set ${TOKEN_ENV} to require a bearer token (recommended whenever "
+        "--bind is not localhost).",
+    )
+    sv.add_argument(
+        "--bind",
+        default=DEFAULT_BIND,
+        help="address to listen on (default: %(default)s, this machine only; "
+        "use 0.0.0.0 to serve your LAN)",
+    )
+    sv.add_argument("--port", type=int, default=DEFAULT_PORT, help="port (default: %(default)s)")
+    sv.add_argument(
+        "--max-queue",
+        type=int,
+        default=DEFAULT_MAX_QUEUE,
+        help="jobs allowed to wait before new ones get HTTP 429 (default: %(default)s)",
+    )
+    _add_model_args(sv, demo_help="serve the built-in toy model — no model needed", json_flag=False)
 
     return parser
 
@@ -715,6 +788,63 @@ def _cmd_demo(_args) -> int:
     return 0
 
 
+def _cmd_serve(args) -> int:
+    if not 0 <= args.port <= 65535:
+        print("glassbox: --port must be 0-65535", file=sys.stderr)
+        return 2
+    if args.max_queue < 1:
+        print("glassbox: --max-queue must be at least 1", file=sys.stderr)
+        return 2
+    if args.demo:
+        backend, model = CallableBackend(_probe_demo_model), "built-in toy model (--demo)"
+    else:
+        try:
+            backend = _make_backend(args)
+        except BackendError as error:
+            print(f"glassbox: {error}", file=sys.stderr)
+            return 2
+        model = getattr(backend, "model", "")
+
+    token = os.environ.get(TOKEN_ENV, "").strip() or None
+    service = AuditService(
+        backend, model=model, default_prompt=args.prompt, max_queue=args.max_queue
+    )
+    try:
+        server = make_server(service, args.bind, args.port, token)
+    except OSError as error:
+        service.stop()
+        print(f"glassbox: cannot listen on {args.bind}:{args.port} ({error})", file=sys.stderr)
+        return 2
+
+    host, port = server.server_address[:2]
+    print(f"glassbox serve: http://{host}:{port}/  model: {model}", file=sys.stderr)
+    if not args.demo and args.backend == "ollama":
+        print(f"  model server: {args.host}  (timeout {args.timeout:g}s)", file=sys.stderr)
+    print(f"  token: {'required' if token else 'NOT required'}", file=sys.stderr)
+    if not is_loopback(args.bind) and not token:
+        print(
+            f"  WARNING: listening beyond this machine with no token. Anyone who can reach "
+            f"port {port} can submit jobs. Set {TOKEN_ENV} to require one.",
+            file=sys.stderr,
+        )
+
+    def _shutdown(*_):
+        # shutdown() blocks until serve_forever exits, so call it off the main thread.
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    with contextlib.suppress(ValueError, AttributeError):  # not main thread / no SIGTERM
+        signal.signal(signal.SIGTERM, _shutdown)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+        service.stop()
+        print("glassbox serve: stopped", file=sys.stderr)
+    return 0
+
+
 def _force_utf8_output() -> None:
     """Emit UTF-8 regardless of the console code page.
 
@@ -741,6 +871,7 @@ def main(argv: list[str] | None = None) -> int:
         "batch": _cmd_batch,
         "lens": _cmd_lens,
         "demo": _cmd_demo,
+        "serve": _cmd_serve,
     }
     return handlers[args.command](args)
 
