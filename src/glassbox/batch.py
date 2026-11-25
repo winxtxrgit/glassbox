@@ -70,7 +70,11 @@ class BatchItem:
 
     @property
     def checks(self) -> dict[str, bool] | None:
-        """``{"grounded", "faithful", "robust"}`` flags, or None if the item errored."""
+        """Pass/fail per lens that applied, or None if the item errored.
+
+        ``faithful`` is absent when that test did not apply to the verdict (a
+        default-label verdict such as "benign").
+        """
         if self.report is not None:
             return self.report.checks
         return self.saved
@@ -78,11 +82,27 @@ class BatchItem:
     @property
     def trustworthy(self) -> bool:
         checks = self.checks
-        return bool(checks) and all(checks[name] for name in CHECKS)
+        return bool(checks) and all(checks.values())
 
 
 def _rate(flags: list[bool]) -> float:
     return sum(flags) / len(flags) if flags else 0.0
+
+
+def wilson_interval(passed: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """95% Wilson score interval for a pass rate of *passed* out of *n*.
+
+    A rate over a few dozen documents is a noisy estimate: 15/40 = 38% is
+    consistent with anything from about 24% to 53%. Wilson stays inside [0, 1]
+    and behaves at 0/n and n/n, unlike the textbook normal approximation.
+    """
+    if n <= 0:
+        return (0.0, 1.0)
+    p = passed / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return (max(0.0, centre - half), min(1.0, centre + half))
 
 
 @dataclass(frozen=True)
@@ -117,8 +137,18 @@ class BatchReport:
         """Errors from the model's reply (not JSON, unknown label)."""
         return self.errors - self.backend_errors
 
+    def _flags(self, name: str) -> list[bool]:
+        """Pass/fail for one lens over the items it applied to."""
+        if name == "trustworthy":
+            return [item.trustworthy for item in self.scored]
+        return [item.checks[name] for item in self.scored if name in item.checks]  # type: ignore[operator, index]
+
+    def applicable(self, name: str) -> int:
+        """How many scored items the lens *name* applied to (its denominator)."""
+        return len(self._flags(name))
+
     def _check_rate(self, name: str) -> float:
-        return _rate([item.checks[name] for item in self.scored])  # type: ignore[index]
+        return _rate(self._flags(name))
 
     @property
     def grounded_rate(self) -> float:
@@ -134,7 +164,12 @@ class BatchReport:
 
     @property
     def trustworthy_rate(self) -> float:
-        return _rate([item.trustworthy for item in self.scored])
+        return _rate(self._flags("trustworthy"))
+
+    def interval(self, name: str) -> tuple[float, float]:
+        """95% Wilson interval for ``grounded``/``faithful``/``robust``/``trustworthy``."""
+        flags = self._flags(name)
+        return wilson_interval(sum(flags), len(flags))
 
 
 def _doc_key(document: str) -> str:
@@ -149,6 +184,7 @@ def _fingerprint(backend: Backend, policy: Policy) -> dict:
         "labels": list(policy.labels),
         "question": policy.question,
         "prompt_style": policy.prompt_style,
+        "default_label": policy.default_label,
     }
 
 
@@ -189,7 +225,7 @@ def _load_checkpoint(path: Path, fingerprint: dict) -> dict[str, dict]:
 def _restore(document: str, record: dict) -> BatchItem:
     if record.get("error") is not None:
         return BatchItem(document=document, report=None, error=record["error"])
-    saved = {name: bool(record["checks"][name]) for name in CHECKS}
+    saved = {name: bool(record["checks"][name]) for name in CHECKS if name in record["checks"]}
     return BatchItem(document=document, report=None, error=None, saved=saved)
 
 

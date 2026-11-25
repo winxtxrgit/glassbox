@@ -32,15 +32,35 @@ class AuditReport:
     verdict: Verdict
     faithfulness: FaithfulnessReport
     consistency: ConsistencyReport
+    default_label: str | None = None
+
+    @property
+    def is_default(self) -> bool:
+        """The verdict is the policy's "nothing relevant here" label (e.g. benign)."""
+        default = self.default_label
+        return default is not None and self.verdict.label.lower() == default.lower()
 
     @property
     def grounded(self) -> bool:
-        """Every cited span exists in the document."""
+        """Every cited span exists in the document.
+
+        A default-label verdict that cites nothing is grounded: "nothing here is
+        a signal" needs no quote, and inventing none is not hallucinating. Any
+        quote it *does* offer must still be real.
+        """
+        if self.is_default and not self.verdict.citations:
+            return True
         return self.verdict.grounded
 
     @property
-    def faithful(self) -> bool:
-        """The decision collapses once its cited evidence is erased."""
+    def faithful(self) -> bool | None:
+        """The decision collapses once its cited evidence is erased.
+
+        None when the test does not apply (a default-label verdict, or evidence
+        that is the whole document); see :attr:`FaithfulnessReport.applicable`.
+        """
+        if not self.faithfulness.applicable:
+            return None
         return self.faithfulness.load_bearing
 
     @property
@@ -50,7 +70,12 @@ class AuditReport:
 
     @property
     def checks(self) -> dict[str, bool]:
-        return {"grounded": self.grounded, "faithful": self.faithful, "robust": self.robust}
+        """The lenses that apply to this verdict, and whether each passed."""
+        checks = {"grounded": self.grounded}
+        if self.faithful is not None:
+            checks["faithful"] = self.faithful
+        checks["robust"] = self.robust
+        return checks
 
     @property
     def passed(self) -> int:
@@ -58,7 +83,7 @@ class AuditReport:
 
     @property
     def trustworthy(self) -> bool:
-        """True only when all three lenses pass."""
+        """True only when every lens that applies passes."""
         return self.passed == len(self.checks)
 
 
@@ -72,4 +97,9 @@ def audit(document: str, backend: Backend, policy: Policy = DEFAULT_POLICY) -> A
     verdict = triage(document, backend, policy)
     faithfulness = faithfulness_analyze(document, backend, policy, verdict=verdict)
     consistency = consistency_check(document, backend, policy, original=verdict)
-    return AuditReport(verdict=verdict, faithfulness=faithfulness, consistency=consistency)
+    return AuditReport(
+        verdict=verdict,
+        faithfulness=faithfulness,
+        consistency=consistency,
+        default_label=policy.default_label,
+    )

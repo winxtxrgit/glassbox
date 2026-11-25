@@ -485,7 +485,9 @@ def _render_faithfulness(report: FaithfulnessReport) -> str:
         "evidence faithfulness (erase each cited span, then re-decide):",
     ]
     if not report.testable:
-        lines.append("  (no grounded evidence to test)")
+        lines.append(
+            "  (not tested)" if not report.applicable else "  (no grounded evidence to test)"
+        )
     for probe in report.probes:
         if probe.flipped:
             tag = "load-bearing"
@@ -497,7 +499,9 @@ def _render_faithfulness(report: FaithfulnessReport) -> str:
         lines.append(f"               -> {effect}")
 
     lines.append("")
-    if not report.testable:
+    if not report.applicable:
+        lines.append(f"faithful:   N/A - {report.not_applicable}.")
+    elif not report.testable:
         lines.append("faithful:   UNTESTABLE - the verdict cited nothing that exists.")
     elif report.load_bearing:
         lines.append(
@@ -608,7 +612,9 @@ def _render_audit(report: AuditReport) -> str:
     v = report.verdict
     lines = [f"verdict:    {v.label} (confidence {v.confidence:.2f})", ""]
 
-    if report.grounded:
+    if report.grounded and report.is_default and not v.citations:
+        g = f"PASS - a '{v.label}' verdict needs no quote, and it invented none"
+    elif report.grounded:
         g = "PASS - every cited span exists in the document"
     elif v.hallucinated_citations:
         g = f"FAIL - {len(v.hallucinated_citations)} cited span(s) are not in the document"
@@ -616,7 +622,9 @@ def _render_audit(report: AuditReport) -> str:
         g = "FAIL - the verdict cited no evidence"
     lines.append(f"grounded:   {g}")
 
-    if not report.faithfulness.testable:
+    if report.faithful is None:
+        f = f"N/A  - {report.faithfulness.not_applicable}"
+    elif not report.faithfulness.testable:
         f = "FAIL - no grounded evidence to test"
     elif report.faithful:
         f = "PASS - erasing the cited evidence flips the verdict"
@@ -634,7 +642,7 @@ def _render_audit(report: AuditReport) -> str:
     lines.append(f"robust:     {r}")
 
     lines.append("")
-    total = len(report.checks)
+    total = len(report.checks)  # only the lenses that apply to this verdict
     if report.trustworthy:
         lines.append(f"trust:      {report.passed}/{total} checks passed - this verdict holds up.")
     else:
@@ -656,16 +664,27 @@ def _render_batch(report) -> str:
         lines.append("  (no documents audited)")
         return "\n".join(lines)
 
-    def row(label: str, rate: float) -> str:
-        passed = round(rate * report.n)
-        return f"  {label:<13} {passed}/{report.n}  ({rate * 100:.0f}%)"
+    def row(name: str, rate: float) -> str:
+        n = report.applicable(name)
+        passed = round(rate * n)
+        low, high = report.interval(name)
+        note = f"  ({report.n - n} n/a)" if n != report.n else ""
+        return (
+            f"  {name + ':':<13} {passed}/{n}  {f'({rate * 100:.0f}%)':<6}"
+            f"  95% CI {low * 100:.0f}-{high * 100:.0f}%{note}"
+        )
 
     lines += [
-        row("grounded:", report.grounded_rate),
-        row("faithful:", report.faithful_rate),
-        row("robust:", report.robust_rate),
-        row("trustworthy:", report.trustworthy_rate),
+        row("grounded", report.grounded_rate),
+        row("faithful", report.faithful_rate),
+        row("robust", report.robust_rate),
+        row("trustworthy", report.trustworthy_rate),
     ]
+    if report.n < 100:
+        lines += [
+            "",
+            f"  (n={report.n}: rates closer than these intervals are not a real difference)",
+        ]
     return "\n".join(lines)
 
 
@@ -735,7 +754,7 @@ def _cmd_probe(args) -> int:
         print(f"glassbox: {error}", file=sys.stderr)
         return 2
     _emit(args, _render_faithfulness(report), lambda: faithfulness_dict(report))
-    return 0 if report.load_bearing else 1
+    return 0 if report.load_bearing or not report.applicable else 1
 
 
 def _cmd_stress(args) -> int:
