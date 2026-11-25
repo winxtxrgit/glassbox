@@ -6,6 +6,20 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- **`batch --checkpoint PATH`**: each finished document is appended to a JSON Lines
+  file, and a re-run skips the documents already in it, so a multi-hour run on a
+  Raspberry Pi survives a reboot. The file records the model and policy and is
+  refused for a different one; a torn last line from a killed run is ignored.
+  Timed-out requests are never saved, so they are retried on resume.
+- **`batch --skip-errors`**: a request that times out or gets no reply is counted
+  as an error and the run moves on, instead of discarding every document already
+  audited. Three in a row still stop the run (the server is down, not slow).
+  `batch` now shows per-document progress on stderr and splits errors into
+  "unparseable" and "timed out / no reply" (also in `--json`: `parse_errors`,
+  `backend_errors`).
+- `benchmarks/run_benchmark.py` skips dead requests the same way, prints progress,
+  adds an **Errors** column (and CSV field), and takes `--checkpoint-dir DIR` to
+  resume a killed run.
 - **Read the document from stdin** when the file is `-`, on `audit`, `triage`,
   `probe` and `stress` (`pbpaste | glassbox audit -`). Stdin is decoded as UTF-8,
   like a file. ([#15](https://github.com/winxtxrgit/glassbox/issues/15))
@@ -57,6 +71,19 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 - A backend timeout is now reported as a timeout ("no reply from … within Ns …
   retry with a larger --timeout") instead of "unreadable reply", and an
   unreachable server is still told apart from a slow one.
+- **Reasoning models no longer think before every verdict.** The Ollama backend
+  sends `think: false`, so qwen3-style models answer the JSON directly instead of
+  spending most of the latency on hidden reasoning (on a Pi, 30-50 s per request).
+  If the server rejects the flag it is dropped for the rest of the run. A
+  `<think>...</think>` block in any backend's reply is stripped before parsing.
+- **An HTTP error from Ollama is no longer reported as "cannot reach Ollama".**
+  A missing model (HTTP 404) now says so, with Ollama's own message and an
+  `ollama pull` hint, instead of sending you to check a server that is up.
+- **`setup-pi.sh` no longer firewalls off what already runs on the Pi.** It keeps
+  any existing listener on tcp 53/80/443 and udp 53/67/123 open to the LAN (a
+  Pi-hole's DNS would otherwise die for the whole house), and allows the LAN over
+  IPv6 too (link-local and the on-link /64), since `ssh pi.local` often resolves
+  to IPv6 and would be locked out once ufw is enabled.
 
 ## 0.8.0 — Benchmarks & PyPI
 

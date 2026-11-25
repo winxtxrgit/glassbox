@@ -9,6 +9,7 @@ deletion, paraphrase consistency, confidence calibration.
 from __future__ import annotations
 
 import json
+import re
 
 from .backends import Backend
 from .grounding import ground
@@ -28,6 +29,15 @@ def _coerce_confidence(value: object) -> float:
     return max(0.0, min(1.0, number))
 
 
+# Reasoning models may prefix their answer with a <think>...</think> block (or, if
+# cut off, an unterminated one). It is not part of the verdict.
+_THINK_BLOCK = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_reasoning(raw: str) -> str:
+    return _THINK_BLOCK.sub("", raw).strip() if "<think>" in raw.lower() else raw
+
+
 def _match_label(raw: object, policy: Policy) -> str:
     if isinstance(raw, str):
         for label in policy.labels:
@@ -45,6 +55,8 @@ def triage(document: str, backend: Backend, policy: Policy = DEFAULT_POLICY) -> 
     system, user = build_prompts(document, policy)
     raw = backend.generate(system, user)
 
+    if isinstance(raw, str):
+        raw = _strip_reasoning(raw)
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError) as error:

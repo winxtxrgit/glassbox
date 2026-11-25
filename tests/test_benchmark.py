@@ -107,8 +107,9 @@ def test_write_csv_outputs_expected_header_and_rows(tmp_path: Path):
         "trustworthy",
         "ece",
         "latency",
+        "errors",
     ]
-    assert rows[1] == ["m1", "3", "0.85", "0.9", "1.0", "1.0", "1.0", "0.25", "11.0"]
+    assert rows[1] == ["m1", "3", "0.85", "0.9", "1.0", "1.0", "1.0", "0.25", "11.0", "0"]
 
 
 def test_main_with_csv_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

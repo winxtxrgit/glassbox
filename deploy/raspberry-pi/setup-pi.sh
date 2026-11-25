@@ -76,19 +76,30 @@ say "Firewall"
 if [ "${SKIP_UFW:-0}" = "1" ]; then
   warn "SKIP_UFW=1: not touching the firewall. Ollama (:11434) has NO auth."
 else
+  # The LAN, over IPv4 and IPv6: link-local plus the on-link /64 prefix(es), so
+  # `ssh pi.local` (which often resolves to IPv6) keeps working once ufw is on.
+  LAN_SRCS="$LAN_CIDR fe80::/10 $(ip -o -6 route show proto kernel | awk '$1 ~ /\/64$/ && $1 !~ /^fe80/ {print $1}' | sort -u | tr '\n' ' ')"
+  allow() { # allow <port> <proto> <comment>
+    for src in $LAN_SRCS; do
+      sudo ufw allow from "$src" to any port "$1" proto "$2" comment "$3" >/dev/null
+    done
+  }
+  listening() { sudo ss -lnH "$1" "( sport = :$2 )" | grep -q .; }
   # SSH first, so enabling the firewall can never lock us out.
-  sudo ufw allow from "$LAN_CIDR" to any port 22 proto tcp comment 'ssh (LAN)' >/dev/null
-  sudo ufw allow from "$LAN_CIDR" to any port 11434 proto tcp comment 'ollama (LAN)' >/dev/null
-  sudo ufw allow from "$LAN_CIDR" to any port 8787 proto tcp comment 'glassbox (LAN)' >/dev/null
-  # Keep whatever already serves port 80 reachable from the LAN.
-  if sudo ss -tlnH '( sport = :80 )' | grep -q .; then
-    sudo ufw allow from "$LAN_CIDR" to any port 80 proto tcp comment 'existing web (LAN)' >/dev/null
-    ok "kept port 80 open to the LAN (something already listens there)"
-  fi
+  allow 22 tcp 'ssh (LAN)'
+  allow 11434 tcp 'ollama (LAN)'
+  allow 8787 tcp 'glassbox (LAN)'
+  # Keep services that already run here (a web UI, Pi-hole, ...) reachable from the LAN.
+  for p in 80 443 53; do
+    if listening -t "$p"; then allow "$p" tcp "existing :$p (LAN)"; ok "kept tcp/$p open to the LAN"; fi
+  done
+  for p in 53 67 123; do
+    if listening -u "$p"; then allow "$p" udp "existing :$p (LAN)"; ok "kept udp/$p open to the LAN"; fi
+  done
   sudo ufw default deny incoming >/dev/null
   sudo ufw default allow outgoing >/dev/null
   sudo ufw --force enable >/dev/null
-  ok "deny incoming except 22/11434/8787 from $LAN_CIDR"
+  ok "deny incoming except the above from: $LAN_SRCS"
 fi
 
 # --- 4. models -----------------------------------------------------------------

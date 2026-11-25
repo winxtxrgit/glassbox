@@ -47,6 +47,7 @@ CSV_HEADER = (
     "trustworthy",
     "ece",
     "latency",
+    "errors",
 )
 
 
@@ -56,17 +57,45 @@ def benchmark(
     host: str,
     prompt_style: str = "plain",
     timeout: float = DEFAULT_TIMEOUT,
+    checkpoint: str | Path | None = None,
 ) -> dict:
-    """Run both lenses on *model* over *corpus* once and return the aggregate metrics."""
+    """Run both lenses on *model* over *corpus* once and return the aggregate metrics.
+
+    A request that times out (a Pi browning out, a dropped connection) is
+    recorded as an error and skipped instead of discarding the whole run; three
+    in a row stop it. With *checkpoint*, finished documents are saved as they
+    complete and a re-run resumes from there.
+    """
     backend = OllamaBackend(model=model, host=host, timeout=timeout)
     policy = replace(DEFAULT_POLICY, prompt_style=prompt_style)
     documents = load_documents(corpus)
     dataset = load_dataset(corpus)
 
+    def progress(index: int, total: int, item) -> None:
+        status = (
+            "error"
+            if item.error is not None
+            else ("trustworthy" if item.trustworthy else "not trustworthy")
+        )
+        print(f"  [{index}/{total}] {status}", flush=True)
+
     start = time.monotonic()
-    batch = run_batch(documents, backend, policy)
-    calibration = evaluate(dataset, backend, policy)
+    batch = run_batch(
+        documents,
+        backend,
+        policy,
+        skip_backend_errors=True,
+        checkpoint=checkpoint,
+        progress=progress,
+    )
+    calibration = evaluate(dataset, backend, policy, skip_backend_errors=True)
     elapsed = time.monotonic() - start
+    if batch.errors or calibration.errors:
+        print(
+            f"  errors: {batch.parse_errors} unparseable, {batch.backend_errors} no reply "
+            f"(audit); {calibration.errors} (calibrate)",
+            flush=True,
+        )
 
     return {
         "model": model,
@@ -77,7 +106,10 @@ def benchmark(
         "robust": batch.robust_rate,
         "trustworthy": batch.trustworthy_rate,
         "ece": calibration.ece,
-        "latency": elapsed / max(batch.n, 1),  # per document, audit + one calibrate call
+        # Per document, audit + one calibrate call. Restored checkpoint items
+        # cost nothing, so a resumed run under-reports latency: it is per *run*.
+        "latency": elapsed / max(batch.n, 1),
+        "errors": batch.errors + calibration.errors,
     }
 
 
@@ -88,7 +120,7 @@ def aggregate(runs: list[dict]) -> dict:
     same whether ``--runs`` is 1 or 20.
     """
     model = runs[0]["model"]
-    metrics = (*RATE_METRICS, *SCORE_METRICS, "latency")
+    metrics = (*RATE_METRICS, *SCORE_METRICS, "latency", "errors")
     # N can differ run to run if the model errors on a different set of docs
     # (e.g. a prompt it can't follow); show the range so the displayed N and the
     # averaged rates aren't quietly describing different document sets.
@@ -96,22 +128,26 @@ def aggregate(runs: list[dict]) -> dict:
     n = ns[0] if len(set(ns)) == 1 else f"{min(ns)}-{max(ns)}"
     row: dict = {"model": model, "n": n, "runs": len(runs)}
     for metric in metrics:
-        values = [r[metric] for r in runs]
+        values = [r.get(metric, 0) for r in runs]  # "errors" is absent from old rows
         row[metric] = {"mean": mean(values), "min": min(values), "max": max(values)}
     return row
 
 
 def to_markdown(rows: list[dict]) -> str:
     """Mean table. Reads aggregate rows (each metric is a mean/min/max dict)."""
-    header = "| Model | N | Accuracy | Grounded | Faithful | Robust | Trustworthy | ECE | ~s/doc |"
-    sep = "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+    header = (
+        "| Model | N | Accuracy | Grounded | Faithful | Robust | Trustworthy | ECE | ~s/doc "
+        "| Errors |"
+    )
+    sep = "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
     lines = [header, sep]
     for r in rows:
         lines.append(
             f"| `{r['model']}` | {r['n']} | {r['accuracy']['mean']:.0%} "
             f"| {r['grounded']['mean']:.0%} | {r['faithful']['mean']:.0%} "
             f"| {r['robust']['mean']:.0%} | {r['trustworthy']['mean']:.0%} "
-            f"| {r['ece']['mean']:.2f} | {r['latency']['mean']:.1f} |"
+            f"| {r['ece']['mean']:.2f} | {r['latency']['mean']:.1f} "
+            f"| {r['errors']['mean']:.0f} |"
         )
     return "\n".join(lines)
 
@@ -155,6 +191,7 @@ def write_csv(rows: list[dict], path: str | Path) -> None:
                     round(r["trustworthy"]["mean"], 4),
                     round(r["ece"]["mean"], 4),
                     round(r["latency"]["mean"], 4),
+                    round(r["errors"]["mean"], 4),
                 ]
             )
 
@@ -185,6 +222,12 @@ def main(argv: list[str] | None = None) -> int:
         "verbatim-quoting examples recover a model's grounding",
     )
     parser.add_argument("--csv", metavar="PATH", help="write benchmark results to CSV at PATH")
+    parser.add_argument(
+        "--checkpoint-dir",
+        metavar="DIR",
+        help="save each audited document under DIR as it finishes, so a run killed "
+        "midway (power cut, reboot) resumes instead of starting over",
+    )
     args = parser.parse_args(argv)
 
     if args.runs < 1:
@@ -198,7 +241,13 @@ def main(argv: list[str] | None = None) -> int:
         for i in range(args.runs):
             suffix = f" (run {i + 1}/{args.runs})" if args.runs > 1 else ""
             print(f"# benchmarking {model} [{args.prompt}]{suffix} ...", flush=True)
-            runs.append(benchmark(model, args.corpus, args.host, args.prompt, args.timeout))
+            extra = {}
+            if args.checkpoint_dir:
+                name = f"{model}-{args.prompt}-run{i + 1}".replace(":", "_").replace("/", "_")
+                extra["checkpoint"] = Path(args.checkpoint_dir) / f"{name}.jsonl"
+            runs.append(
+                benchmark(model, args.corpus, args.host, args.prompt, args.timeout, **extra)
+            )
         rows.append(aggregate(runs))
 
     print()

@@ -165,20 +165,37 @@ def evaluate(
     backend: Backend,
     policy: Policy = DEFAULT_POLICY,
     bins: int = 10,
+    *,
+    skip_backend_errors: bool = False,
+    max_consecutive_backend_errors: int = 3,
 ) -> CalibrationReport:
     """Classify each labelled *Example* and score the model's confidence.
 
     An example the model cannot classify (unparseable reply) is counted in
     ``errors`` and left out of every metric — calibration is measured over the
     predictions the model actually committed to. A :class:`BackendError` (model
-    unreachable) is not caught: it aborts the whole run.
+    unreachable, timeout) aborts the whole run unless ``skip_backend_errors`` is
+    set, in which case it is counted in ``errors`` too -- up to
+    ``max_consecutive_backend_errors`` in a row, after which the server is taken
+    to be down and the error is raised.
     """
+    from .backends import BackendError
+
     results: list[ExampleResult] = []
     errors = 0
+    consecutive = 0
     for example in dataset:
         try:
             verdict = triage(example.document, backend, policy)
+            consecutive = 0
         except TriageError:
+            errors += 1
+            consecutive = 0
+            continue
+        except BackendError:
+            consecutive += 1
+            if not skip_backend_errors or consecutive >= max_consecutive_backend_errors:
+                raise
             errors += 1
             continue
         results.append(

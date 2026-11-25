@@ -56,6 +56,19 @@ def _timeout_message(where: str, timeout: float) -> str:
     )
 
 
+def _http_detail(error: urllib.error.HTTPError) -> str:
+    """The server's own error text (Ollama sends ``{"error": "..."}``), trimmed."""
+    try:
+        raw = error.read().decode(errors="replace")
+    except OSError:
+        return str(error.reason)
+    try:
+        message = json.loads(raw).get("error")
+    except (json.JSONDecodeError, AttributeError):
+        message = None
+    return str(message or raw or error.reason)[:200]
+
+
 class BackendError(RuntimeError):
     """The backend could not produce a response (unreachable, timeout, bad reply)."""
 
@@ -97,6 +110,11 @@ class OllamaBackend:
     Requests JSON-formatted output and greedy decoding (``temperature=0``) so the
     verdict is as reproducible as a local model allows. Raises :class:`BackendError`
     with a pointer to the fix when the server isn't running or the model is missing.
+
+    Reasoning ("thinking") models such as qwen3 are asked not to think
+    (``think=False``): glassbox wants a JSON verdict, not a chain of thought, and
+    on a CPU box the hidden reasoning multiplies the latency. Pass ``think=None``
+    to leave the model's default alone.
     """
 
     def __init__(
@@ -104,13 +122,15 @@ class OllamaBackend:
         model: str = DEFAULT_MODEL,
         host: str = DEFAULT_HOST,
         timeout: float = DEFAULT_TIMEOUT,
+        think: bool | None = False,
     ) -> None:
         self.model = model
         self.host = host.rstrip("/")
         self.timeout = timeout
+        self.think = think
 
     def generate(self, system: str, user: str) -> str:
-        payload = {
+        payload: dict = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
@@ -120,6 +140,38 @@ class OllamaBackend:
             "stream": False,
             "options": {"temperature": 0},
         }
+        if self.think is not None:
+            payload["think"] = self.think
+        try:
+            body = self._post(payload)
+        except urllib.error.HTTPError as error:
+            detail = _http_detail(error)
+            if "think" in payload and "think" in detail.lower():
+                # An Ollama too old to know the flag, or a model that refuses it:
+                # drop it for the rest of this backend's life rather than fail.
+                self.think = None
+                del payload["think"]
+                try:
+                    body = self._post(payload)
+                except urllib.error.HTTPError as retry_error:
+                    raise self._http_error(retry_error) from None
+            else:
+                raise self._http_error(error, detail) from None
+
+        try:
+            return body["message"]["content"]
+        except (KeyError, TypeError) as error:
+            raise BackendError(f"unexpected Ollama response shape: {error}") from None
+
+    def _http_error(self, error: urllib.error.HTTPError, detail: str | None = None) -> BackendError:
+        # Ollama answered, so it is reachable: say what it actually objected to
+        # (typically "model not found") instead of "cannot reach Ollama".
+        detail = _http_detail(error) if detail is None else detail
+        hint = f" Try 'ollama pull {self.model}'." if error.code == 404 else ""
+        return BackendError(f"Ollama at {self.host} returned HTTP {error.code}: {detail}.{hint}")
+
+    def _post(self, payload: dict) -> dict:
+        """POST *payload* to /api/chat. HTTPError propagates; other failures -> BackendError."""
         request = urllib.request.Request(
             f"{self.host}/api/chat",
             data=json.dumps(payload).encode(),
@@ -127,7 +179,9 @@ class OllamaBackend:
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode())
+                return json.loads(response.read().decode())
+        except urllib.error.HTTPError:
+            raise
         except (TimeoutError, urllib.error.URLError) as error:
             if _is_timeout(error):
                 raise BackendError(_timeout_message(self.host, self.timeout)) from None
@@ -138,11 +192,6 @@ class OllamaBackend:
             ) from None
         except (OSError, json.JSONDecodeError) as error:
             raise BackendError(f"Ollama returned an unreadable reply: {error}") from None
-
-        try:
-            return body["message"]["content"]
-        except (KeyError, TypeError) as error:
-            raise BackendError(f"unexpected Ollama response shape: {error}") from None
 
 
 class OpenAICompatBackend:

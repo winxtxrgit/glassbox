@@ -110,21 +110,18 @@ def audit_dict(r: AuditReport) -> dict:
 
 
 def batch_item_dict(item: BatchItem) -> dict:
-    if item.report is not None:
-        return {
-            "document": item.document,
-            "grounded": item.report.grounded,
-            "faithful": item.report.faithful,
-            "robust": item.report.robust,
-            "trustworthy": item.report.trustworthy,
-        }
-    return {"document": item.document, "error": item.error}
+    checks = item.checks
+    if checks is not None:
+        return {"document": item.document, **checks, "trustworthy": item.trustworthy}
+    return {"document": item.document, "error": item.error, "backend_error": item.backend_error}
 
 
 def batch_dict(r: BatchReport) -> dict:
     return {
         "n": r.n,
         "errors": r.errors,
+        "parse_errors": r.parse_errors,
+        "backend_errors": r.backend_errors,
         "grounded_rate": r.grounded_rate,
         "faithful_rate": r.faithful_rate,
         "robust_rate": r.robust_rate,
