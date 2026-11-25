@@ -8,6 +8,8 @@ quote exists, and a model that paraphrases instead of quoting convicts itself.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from .schema import Policy
 
 # The instruction styles build_prompts understands. "plain" states the rules;
@@ -23,6 +25,7 @@ DEFAULT_POLICY = Policy(
         "credential theft, intrusion, or data exfiltration?"
     ),
     labels=("suspicious", "benign"),
+    default_label="benign",
 )
 
 SYSTEM_TEMPLATE = """\
@@ -76,9 +79,70 @@ def build_prompts(document: str, policy: Policy = DEFAULT_POLICY) -> tuple[str, 
     When ``policy.prompt_style == "few-shot"`` the system prompt also carries two
     worked examples demonstrating verbatim evidence quoting.
     """
+    if policy.prompt_style == "few-shot" and set(policy.labels) != set(DEFAULT_POLICY.labels):
+        # The worked examples answer "suspicious"/"benign"; shown under other
+        # labels they would teach the model a label it is not allowed to use.
+        raise ValueError("the few-shot prompt only fits the default suspicious/benign labels")
     labels = ", ".join(policy.labels)
     system = SYSTEM_TEMPLATE.format(labels=labels)
     if policy.prompt_style == "few-shot":
         system = f"{system}\n\n{FEWSHOT_BLOCK}"
     user = f"QUESTION: {policy.question}\n\nDOCUMENT:\n{document}"
     return system, user
+
+
+def make_policy(
+    labels: list[str] | tuple[str, ...] | str | None = None,
+    question: str | None = None,
+    default_label: str | None = None,
+    prompt_style: str = "plain",
+) -> Policy:
+    """Build a :class:`Policy` for your own task, validating it.
+
+    *labels* may be a sequence or a comma-separated string (``"spam,ham"``). With
+    no *labels* and no *question* this is :data:`DEFAULT_POLICY`; giving only a
+    *question* keeps the default labels. Custom labels need a question, since
+    the default one is about security threats. Raises :class:`ValueError` with a
+    message fit for the command line.
+    """
+    if prompt_style not in PROMPT_STYLES:
+        raise ValueError(f"unknown prompt style {prompt_style!r}; choose from {PROMPT_STYLES}")
+
+    if labels is None:
+        if default_label is not None and default_label != DEFAULT_POLICY.default_label:
+            raise ValueError("--default-label needs --labels (the default labels already set one)")
+        policy = DEFAULT_POLICY
+        if question is not None:
+            if not question.strip():
+                raise ValueError("--question must not be empty")
+            policy = replace(policy, name="custom", question=question.strip())
+        return replace(policy, prompt_style=prompt_style)
+
+    raw = labels.split(",") if isinstance(labels, str) else list(labels)
+    cleaned = [label.strip() for label in raw]
+    if any(not label for label in cleaned):
+        raise ValueError("--labels has an empty label (check for a stray comma)")
+    if len(cleaned) < 2:
+        raise ValueError("--labels needs at least two labels, e.g. --labels spam,ham")
+    lowered = [label.lower() for label in cleaned]
+    if len(set(lowered)) != len(lowered):
+        # Replies are matched to labels case-insensitively, so these would collide.
+        raise ValueError("--labels must be distinct (ignoring case)")
+    if question is None or not question.strip():
+        raise ValueError(
+            "--labels needs --question too: the default question is about security threats"
+        )
+    if default_label is not None and default_label.strip().lower() not in lowered:
+        raise ValueError(f"--default-label {default_label!r} is not one of the labels {cleaned}")
+    default = (
+        cleaned[lowered.index(default_label.strip().lower())] if default_label is not None else None
+    )
+    policy = Policy(
+        name="custom",
+        question=question.strip(),
+        labels=tuple(cleaned),
+        prompt_style=prompt_style,
+        default_label=default,
+    )
+    build_prompts("", policy)  # surfaces an incompatible prompt style (few-shot) now
+    return policy

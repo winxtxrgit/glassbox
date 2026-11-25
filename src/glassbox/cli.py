@@ -22,7 +22,6 @@ import os
 import signal
 import sys
 import threading
-from dataclasses import replace
 
 from . import __version__
 from .audit import AuditReport, audit
@@ -47,7 +46,7 @@ from .calibration import (
 )
 from .consistency import ConsistencyReport, check
 from .faithfulness import FaithfulnessReport, analyze
-from .prompts import DEFAULT_POLICY, PROMPT_STYLES
+from .prompts import DEFAULT_POLICY, PROMPT_STYLES, make_policy
 from .schema import Policy, Verdict
 from .serialize import (
     audit_dict,
@@ -233,12 +232,45 @@ def _add_model_args(
         help="instruction style: plain (default), or few-shot which adds worked "
         "verbatim-quoting examples (helps a model that paraphrases its evidence)",
     )
+    task = p.add_argument_group(
+        "your own task (default: security triage, suspicious/benign)",
+        "Audit any classification, e.g. --labels spam,ham --question 'Is this spam?' "
+        "--default-label ham",
+    )
+    task.add_argument(
+        "--labels", metavar="A,B,...", help="comma-separated labels the model must choose from"
+    )
+    task.add_argument("--question", metavar="TEXT", help="the question the model answers")
+    task.add_argument(
+        "--default-label",
+        metavar="LABEL",
+        help="the label for 'nothing relevant here' (like benign or ham): its verdicts rest "
+        "on an absence, so there is no evidence to erase for faithfulness",
+    )
+
+
+def _build_policy(args) -> Policy:
+    """Validate the task flags into a Policy (ValueError on a bad combination)."""
+    custom = any(
+        getattr(args, name, None) is not None for name in ("labels", "question", "default_label")
+    )
+    if custom and getattr(args, "demo", False):
+        raise ValueError(
+            "--demo runs a built-in toy model with the default labels; "
+            "drop --labels/--question/--default-label"
+        )
+    return make_policy(
+        labels=getattr(args, "labels", None),
+        question=getattr(args, "question", None),
+        default_label=getattr(args, "default_label", None),
+        prompt_style=getattr(args, "prompt", "plain"),
+    )
 
 
 def _policy(args) -> Policy:
-    """The triage policy for this invocation, carrying the chosen prompt style."""
-    style = getattr(args, "prompt", "plain")
-    return DEFAULT_POLICY if style == "plain" else replace(DEFAULT_POLICY, prompt_style=style)
+    """The triage policy for this invocation (built and validated in ``main``)."""
+    policy = getattr(args, "policy", None)
+    return policy if policy is not None else _build_policy(args)
 
 
 def _make_backend(args):
@@ -738,8 +770,18 @@ def _cmd_calibrate(args) -> int:
         print("glassbox: give a labelled dataset, or pass --demo", file=sys.stderr)
         return 2
 
+    policy = _policy(args)
+    allowed = {label.lower() for label in policy.labels}
+    unknown = sorted({ex.gold for ex in dataset if ex.gold.lower() not in allowed})
+    if unknown:
+        print(
+            f"glassbox: the dataset uses label(s) {unknown} that are not in "
+            f"{list(policy.labels)}; pass the task's labels with --labels",
+            file=sys.stderr,
+        )
+        return 2
     try:
-        report = evaluate(dataset, backend, _policy(args))
+        report = evaluate(dataset, backend, policy)
     except (BackendError, TriageError) as error:
         print(f"glassbox: {error}", file=sys.stderr)
         return 2
@@ -845,7 +887,11 @@ def _cmd_serve(args) -> int:
 
     token = os.environ.get(TOKEN_ENV, "").strip() or None
     service = AuditService(
-        backend, model=model, default_prompt=args.prompt, max_queue=args.max_queue
+        backend,
+        model=model,
+        default_prompt=args.prompt,
+        max_queue=args.max_queue,
+        policy=_policy(args),
     )
     try:
         server = make_server(service, args.bind, args.port, token)
@@ -900,6 +946,12 @@ def _force_utf8_output() -> None:
 def main(argv: list[str] | None = None) -> int:
     _force_utf8_output()
     args = build_parser().parse_args(argv)
+    if hasattr(args, "labels"):  # every command that classifies with a model
+        try:
+            args.policy = _build_policy(args)
+        except ValueError as error:
+            print(f"glassbox: {error}", file=sys.stderr)
+            return 2
     handlers = {
         "audit": _cmd_audit,
         "triage": _cmd_triage,

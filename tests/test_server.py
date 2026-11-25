@@ -281,6 +281,7 @@ def test_healthz_reports_model_and_queue():
             "ok": True,
             "version": health["version"],
             "model": "toy",
+            "labels": ["suspicious", "benign"],
             "backend_reachable": None,  # not an Ollama backend
             "queue": 0,
             "auth": False,
