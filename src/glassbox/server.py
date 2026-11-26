@@ -519,6 +519,7 @@ function el(tag, text, cls) {
   return node;
 }
 function badge(name, pass) {
+  if (pass === null || pass === undefined) return el("span", "N/A " + name, "badge muted");
   return el("span", (pass ? "PASS " : "FAIL ") + name, "badge " + (pass ? "ok" : "bad"));
 }
 function headers() {
@@ -573,10 +574,14 @@ function render(job) {
                    p.flipped ? "ok" : "warn"), el("q", p.quote));
       fl.append(li);
     }
-    if (!f.probes.length) fl.append(el("li", "(nothing testable)", "muted"));
-    fl.append(el("li", "erase all evidence: label " +
-                 (f.comprehensive_flipped ? "changes" : "stays " + f.comprehensive_label),
-                 f.comprehensive_flipped ? "ok" : "warn"));
+    if (!f.applicable) {
+      fl.append(el("li", "not applicable: " + f.not_applicable, "muted"));
+    } else {
+      if (!f.probes.length) fl.append(el("li", "(nothing testable)", "muted"));
+      fl.append(el("li", "erase all evidence: label " +
+                   (f.comprehensive_flipped ? "changes" : "stays " + f.comprehensive_label),
+                   f.comprehensive_flipped ? "ok" : "warn"));
+    }
     card.append(fl);
     const c = r.consistency;
     card.append(el("h2", "Consistency: same meaning, same verdict?"));

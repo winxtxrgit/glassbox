@@ -36,6 +36,8 @@ def faithfulness_dict(r: FaithfulnessReport) -> dict:
     return {
         "load_bearing": r.load_bearing,
         "testable": r.testable,
+        "applicable": r.applicable,
+        "not_applicable": r.not_applicable,
         "comprehensive_label": r.comprehensive_label,
         "comprehensive_flipped": r.comprehensive_flipped,
         "necessary": [c.quote for c in r.necessary],
@@ -112,7 +114,13 @@ def audit_dict(r: AuditReport) -> dict:
 def batch_item_dict(item: BatchItem) -> dict:
     checks = item.checks
     if checks is not None:
-        return {"document": item.document, **checks, "trustworthy": item.trustworthy}
+        return {
+            "document": item.document,
+            "grounded": checks["grounded"],
+            "faithful": checks.get("faithful"),  # None: the test did not apply
+            "robust": checks["robust"],
+            "trustworthy": item.trustworthy,
+        }
     return {"document": item.document, "error": item.error, "backend_error": item.backend_error}
 
 
@@ -126,6 +134,13 @@ def batch_dict(r: BatchReport) -> dict:
         "faithful_rate": r.faithful_rate,
         "robust_rate": r.robust_rate,
         "trustworthy_rate": r.trustworthy_rate,
+        "faithful_applicable": r.applicable("faithful"),
+        "intervals_95": {
+            name: list(r.interval(name))
+            for name in ("grounded", "faithful", "robust", "trustworthy")
+        }
+        if r.n
+        else {},
         "items": [batch_item_dict(item) for item in r.items],
     }
 

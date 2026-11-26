@@ -167,16 +167,19 @@ def check(
     if original is None:
         original = triage(document, backend, policy)
 
+    # A no-op edit would only re-run the model on the original text, and
+    # unchanged variants are excluded from the stability score anyway — so
+    # reuse the original verdict rather than spend another backend call.
+    # (Matters for the Thai perturbations, which are no-ops on every non-Thai
+    # document.) Likewise two edits that produce the same text share one call.
+    seen: dict[str, Verdict] = {document: original}
     variants: list[Variant] = []
     for perturbation in perturbations:
         edited = perturbation.apply(document)
         changed = edited != document
-        # A no-op edit would only re-run the model on the original text, and
-        # unchanged variants are excluded from the stability score anyway — so
-        # reuse the original verdict rather than spend another backend call.
-        # (Matters for the Thai perturbations, which are no-ops on every
-        # non-Thai document.)
-        after = triage(edited, backend, policy) if changed else original
+        if edited not in seen:
+            seen[edited] = triage(edited, backend, policy)
+        after = seen[edited]
         variants.append(
             Variant(
                 perturbation=perturbation,

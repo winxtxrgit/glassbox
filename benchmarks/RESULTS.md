@@ -6,6 +6,12 @@ over a corpus and the answer is a number. This page also asks a second question:
 does the `--prompt few-shot` nudge — worked examples of verbatim quoting — fix a
 model that paraphrases its evidence?
 
+> **Metric note (added after 0.8).** The tables below use the original, strict
+> faithfulness reading, which tested every verdict, including the 18 benign ones that
+> cannot pass it by construction. Current glassbox reports faithfulness as N/A for
+> `benign` verdicts. Faithful/trustworthy here are lower bounds, and they are
+> comparable with each other but not with runs made by newer versions.
+
 - **Corpus:** [`corpus.jsonl`](corpus.jsonl) — 40 short emails: 16 phishing / scam /
   BEC, 18 benign, 6 prompt-injection (labelled suspicious — an email telling the
   classifier to say "benign" is itself a red flag).

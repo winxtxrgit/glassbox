@@ -60,11 +60,25 @@ class FaithfulnessReport:
     probes: list[CitationProbe]
     comprehensive_label: str  # label after ALL cited evidence is erased at once
     comprehensive_flipped: bool
+    # Why the erasure test says nothing about this verdict, or None when it does.
+    not_applicable: str | None = None
 
     @property
     def testable(self) -> bool:
         """True when there was grounded evidence to erase in the first place."""
         return bool(self.probes)
+
+    @property
+    def applicable(self) -> bool:
+        """True when erasing the evidence is a meaningful test of this verdict.
+
+        It is not for a *default-label* verdict ("benign": nothing here is a
+        signal) -- such a decision rests on an absence, so no erasure should flip
+        it and failing the test would be an artifact. Nor is it when erasing the
+        evidence leaves no document at all: what a model says about an empty
+        input tells you nothing about why it decided the real one.
+        """
+        return self.not_applicable is None
 
     @property
     def necessary(self) -> list[Citation]:
@@ -105,10 +119,35 @@ def analyze(
 
     verified = [c for c in verdict.citations if c.verified]
 
+    default = policy.default_label
+    if default is not None and verdict.label.lower() == default.lower():
+        # Nothing to test, so spend no model calls on it.
+        return FaithfulnessReport(
+            verdict=verdict,
+            probes=[],
+            comprehensive_label=verdict.label,
+            comprehensive_flipped=False,
+            not_applicable=(
+                f"a '{verdict.label}' verdict says nothing in the document is a signal, "
+                "so there is no evidence whose removal should change it"
+            ),
+        )
+
+    # Erasing different citations can leave the same text (duplicate or nested
+    # quotes), and with one citation "erase it" and "erase all" are the same
+    # document. Ask the model once per distinct text: at temperature 0 the
+    # answer is the same, and on slow hardware each call costs seconds.
+    seen: dict[str, Verdict] = {}
+
+    def decide(text: str) -> Verdict:
+        if text not in seen:
+            seen[text] = triage(text, backend, policy)
+        return seen[text]
+
     probes: list[CitationProbe] = []
     for citation in verified:
         ablated = ablate(document, [(citation.start, citation.end)])
-        after = triage(ablated, backend, policy)
+        after = decide(ablated)
         probes.append(
             CitationProbe(
                 citation=citation,
@@ -118,9 +157,14 @@ def analyze(
             )
         )
 
+    not_applicable = None
     if verified:
         ablated_all = ablate(document, [(c.start, c.end) for c in verified])
-        after_all = triage(ablated_all, backend, policy)
+        if not _has_content(ablated_all):
+            not_applicable = (
+                "the cited evidence is the whole document; erasing it leaves nothing to decide on"
+            )
+        after_all = decide(ablated_all)
         comprehensive_label = after_all.label
         comprehensive_flipped = after_all.label != verdict.label
     else:
@@ -132,4 +176,10 @@ def analyze(
         probes=probes,
         comprehensive_label=comprehensive_label,
         comprehensive_flipped=comprehensive_flipped,
+        not_applicable=not_applicable,
     )
+
+
+def _has_content(text: str) -> bool:
+    """True if *text* still has a letter or digit once the evidence is gone."""
+    return any(ch.isalnum() for ch in text)

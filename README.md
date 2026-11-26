@@ -196,6 +196,8 @@ faithful:   YES - erasing all cited evidence flips the verdict to 'benign'.
 
 Run it for real with `glassbox probe email.txt`. A model that keeps its verdict no matter which cited span you erase is rationalizing, not explaining — and `probe` says so (`faithful: NO`, exit code `1`). This is the erasure idea from rationale-faithfulness research (ERASER's *comprehensiveness*), applied to a black-box model through its own output.
 
+The test only means something for a verdict that rests on what the document *says*. A `benign` verdict rests on what it *doesn't* say: nothing in it is a threat, so no erasure should flip it. For such default-label verdicts (`--default-label`, `benign` for the built-in task) faithfulness is reported as **N/A**, costs no model calls, and is left out of the faithful rate. A `benign` verdict that quotes nothing also counts as grounded, since it made nothing up. The same N/A applies when the cited evidence is the whole document, because erasing it leaves an empty input and whatever the model says about nothing is not a reason. `batch` reports each lens over the documents it applies to and prints a 95% confidence interval next to every rate.
+
 ## Does the verdict track meaning, or surface form?
 
 A model that understands the content shouldn't change its mind when you reword the document without changing what it means. `glassbox stress` re-decides after **meaning-preserving edits** — lower-casing, whitespace reflow, a forwarding header, ASCII-normalized punctuation, and the narrow synonym pair `urgent` / `time-sensitive` — and flags any edit that flips the label.

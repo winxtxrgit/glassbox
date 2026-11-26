@@ -5,6 +5,26 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 
 ## Unreleased
 
+### Changed
+- **Faithfulness no longer scores verdicts it cannot test.** A default-label
+  verdict (`benign`) rests on an *absence* of signals, so erasing its quote should
+  never flip it. On real runs that meant `benign` verdicts failed faithfulness by
+  construction, and occasionally "passed" by accident when the quote was the
+  whole document and the model labelled the resulting empty input `suspicious`.
+  Both are now **N/A**: `AuditReport.faithful` is `None`, `checks` omits it, and
+  `trustworthy` means every lens *that applies* passes. The erasure test is also
+  N/A whenever the evidence is the whole document. A default-label verdict that
+  cites nothing counts as grounded (it invented nothing); any quote it does give
+  must still be real. **Faithful and trustworthy rates are therefore not
+  comparable with 0.8 and earlier**, which counted every `benign` verdict as
+  unfaithful. FINDINGS.md and benchmarks/RESULTS.md record the old reading. A
+  custom policy without `--default-label` keeps the old strict behaviour.
+- `batch` rates use each lens's own denominator (`faithful` over the verdicts it
+  applies to, shown as "n/a"), with a **95% Wilson interval** after every rate
+  (`intervals_95`, `faithful_applicable` in `--json`;
+  `glassbox.batch.wilson_interval`). The checkpoint fingerprint includes the
+  default label.
+
 ### Added
 - **Audit your own classification task**: `--labels A,B,...`, `--question TEXT`
   and `--default-label LABEL` on every model command (`audit`, `triage`, `probe`,
@@ -76,6 +96,10 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
   doesn't need `--host` on every command. An explicit `--host` still wins.
 
 ### Fixed
+- **Fewer model calls per audit.** The erasure and consistency passes ask the
+  model once per distinct text. With a single citation, "erase it" and "erase
+  all" are the same document, and two edits that produce the same text share a
+  call. Default-label verdicts skip the erasure pass entirely.
 - A backend timeout is now reported as a timeout ("no reply from … within Ns …
   retry with a larger --timeout") instead of "unreadable reply", and an
   unreachable server is still told apart from a slow one.

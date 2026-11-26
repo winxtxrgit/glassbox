@@ -9,6 +9,14 @@ find out. Short answer: **no. The 7B is better *calibrated* but noticeably less
 - **Dataset:** [`examples/phishing.jsonl`](examples/phishing.jsonl) — 10 labelled emails (5 phishing / 5 benign).
 - **Date:** 2026-11. Small set, single run each — read these as directional, not conclusive.
 
+> **Metric note (added after 0.8).** These numbers use the original, strict
+> faithfulness reading, which tested *every* verdict, including `benign` ones.
+> A `benign` verdict rests on the absence of threat signals, so erasing its quote
+> almost never flips it, and those verdicts failed faithfulness by construction.
+> glassbox now reports faithfulness as N/A for them (see CHANGELOG, Unreleased).
+> Read the faithful and trustworthy columns below as lower bounds. The 3B-vs-7B
+> comparison still holds because both models were scored the same way.
+
 ## Reproduce
 
 ```bash
