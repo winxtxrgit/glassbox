@@ -157,6 +157,12 @@ batch audit over 120 document(s):
 
 `batch` exits 1 unless every document is trustworthy, which is strict for CI. `--min-trustworthy RATE` (0-1, default `1.0`) sets the bar: `glassbox batch inbox.jsonl --min-trustworthy 0.9` fails only when fewer than 90% of the documents hold up.
 
+On slow hardware a corpus can take hours. `--checkpoint run.jsonl` saves each document as it finishes, so re-running the same command after a crash or reboot resumes where it stopped; `--skip-errors` records a timed-out request and moves on instead of aborting (three in a row still stop the run):
+
+```bash
+glassbox batch inbox.jsonl --host http://raspberrypi.local:11434 --timeout 900 --checkpoint run.jsonl --skip-errors
+```
+
 ## Does the verdict actually depend on its evidence?
 
 Citing real text isn't the same as reasoning from it. `glassbox probe` runs the **counterfactual** test: it erases each cited span, re-decides, and checks whether the verdict actually moves. Evidence whose removal flips the label is load-bearing; evidence the verdict survives without is decoration.

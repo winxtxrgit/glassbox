@@ -37,7 +37,7 @@ from .backends import (
     OpenAICompatBackend,
     StubBackend,
 )
-from .batch import load_documents, run_batch
+from .batch import CheckpointError, load_documents, run_batch
 from .calibration import (
     CalibrationReport,
     DatasetError,
@@ -362,6 +362,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="exit 0 when at least this fraction of documents is trustworthy, "
         "0-1 (default: %(default)s)",
     )
+    b.add_argument(
+        "--checkpoint",
+        metavar="PATH",
+        help="append each finished document to this JSON Lines file and skip documents "
+        "already in it, so an interrupted run resumes where it stopped",
+    )
+    b.add_argument(
+        "--skip-errors",
+        action="store_true",
+        help="record a timed-out or dropped request as an error and keep going "
+        "(stops anyway after 3 in a row: the server is down, not slow)",
+    )
 
     lens = sub.add_parser(
         "lens",
@@ -601,7 +613,12 @@ def _render_audit(report: AuditReport) -> str:
 
 
 def _render_batch(report) -> str:
-    skipped = f" ({report.errors} skipped: unparseable)" if report.errors else ""
+    reasons = []
+    if report.parse_errors:
+        reasons.append(f"{report.parse_errors} unparseable")
+    if report.backend_errors:
+        reasons.append(f"{report.backend_errors} timed out / no reply")
+    skipped = f" ({report.errors} skipped: {', '.join(reasons)})" if report.errors else ""
     lines = [f"batch audit over {report.n} document(s){skipped}:", ""]
     if report.n == 0:
         lines.append("  (no documents audited)")
@@ -730,6 +747,17 @@ def _cmd_calibrate(args) -> int:
     return 0 if not (report.overconfident or report.underconfident) else 1
 
 
+def _batch_progress(index: int, total: int, item) -> None:
+    # On stderr so `batch ... > report.txt` still captures only the report.
+    if item.backend_error:
+        status = "no reply (skipped)"
+    elif item.error is not None:
+        status = "unparseable"
+    else:
+        status = "trustworthy" if item.trustworthy else "not trustworthy"
+    print(f"  [{index}/{total}] {status}", file=sys.stderr, flush=True)
+
+
 def _cmd_batch(args) -> int:
     if args.demo:
         documents = list(_BATCH_DEMO_DOCS)
@@ -752,7 +780,17 @@ def _cmd_batch(args) -> int:
         return 2
 
     try:
-        report = run_batch(documents, backend, _policy(args))
+        report = run_batch(
+            documents,
+            backend,
+            _policy(args),
+            skip_backend_errors=getattr(args, "skip_errors", False),
+            checkpoint=None if args.demo else getattr(args, "checkpoint", None),
+            progress=_batch_progress if not getattr(args, "as_json", False) else None,
+        )
+    except CheckpointError as error:
+        print(f"glassbox: {error}", file=sys.stderr)
+        return 2
     except (BackendError, TriageError) as error:
         print(f"glassbox: {error}", file=sys.stderr)
         return 2
