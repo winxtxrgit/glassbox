@@ -38,12 +38,19 @@ class Policy:
     default) states the rules; ``"few-shot"`` also shows worked examples of
     verbatim quoting, which helps a fluent model that otherwise paraphrases its
     evidence instead of copying it.
+
+    ``default_label`` names the label a document gets when *nothing* in it is a
+    signal -- ``benign`` for security triage, ``ham`` for spam filtering. Such a
+    verdict rests on an absence, so there is no span whose removal should flip
+    it, and counterfactual faithfulness does not apply to it. ``None`` (the
+    default for a custom policy) treats every label as one that needs evidence.
     """
 
     name: str
     question: str
     labels: tuple[str, ...]
     prompt_style: str = "plain"
+    default_label: str | None = None
 
 
 @dataclass(frozen=True)

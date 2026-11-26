@@ -163,6 +163,17 @@ On slow hardware a corpus can take hours. `--checkpoint run.jsonl` saves each do
 glassbox batch inbox.jsonl --host http://raspberrypi.local:11434 --timeout 900 --checkpoint run.jsonl --skip-errors
 ```
 
+### Your own task, not just phishing
+
+Security triage (`suspicious` / `benign`) is only the default. Any classification your model makes can be audited the same way: name the labels and the question.
+
+```bash
+glassbox audit msg.txt --labels spam,ham --question "Is this unsolicited bulk advertising?" --default-label ham
+glassbox batch tickets.jsonl --labels billing,bug,account,other --question "Which team should handle this support ticket?"
+```
+
+`--default-label` names the label that means *nothing relevant here* (`benign`, `ham`, `ok`). Leave it out when every label needs positive evidence. The labelled set for `calibrate` must use the same labels, and `--prompt few-shot` only fits the default task because its worked examples answer `suspicious`/`benign`. `glassbox serve` takes the same flags. In Python, use `glassbox.prompts.make_policy(...)`.
+
 ## Does the verdict actually depend on its evidence?
 
 Citing real text isn't the same as reasoning from it. `glassbox probe` runs the **counterfactual** test: it erases each cited span, re-decides, and checks whether the verdict actually moves. Evidence whose removal flips the label is load-bearing; evidence the verdict survives without is decoration.
@@ -324,6 +335,7 @@ glassbox isn't a full evaluation framework — it answers one question deeply: *
 ## Used for
 
 - **Email / phishing triage** — is the "suspicious" verdict real, or hallucinated?
+- **Any classifier** — spam filters, ticket routing, content moderation: `--labels` / `--question` audit your own task.
 - **Document review** — does the summary actually reflect the source?
 - **RAG pipelines** — before serving an answer, check that its citations exist.
 - **Model selection** — which model is most *auditable* on your data? See the [benchmark](benchmarks/RESULTS.md) (3B beats 7B on grounding, faithfulness, and speed) and the [FINDINGS write-up](FINDINGS.md).

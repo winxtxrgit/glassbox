@@ -6,6 +6,14 @@ this project uses [semantic versioning](https://semver.org). Built over 2026-10 
 ## Unreleased
 
 ### Added
+- **Audit your own classification task**: `--labels A,B,...`, `--question TEXT`
+  and `--default-label LABEL` on every model command (`audit`, `triage`, `probe`,
+  `stress`, `calibrate`, `batch`, `serve`), e.g. `--labels spam,ham --question
+  "Is this spam?" --default-label ham`. Validated up front (two or more distinct
+  labels, a question to go with them, a default label among them, no few-shot
+  examples for labels they don't use); `calibrate` refuses a dataset whose labels
+  are outside the task. `Policy.default_label` and `prompts.make_policy()` for the
+  Python API; `/healthz` reports the served task's labels.
 - **`batch --checkpoint PATH`**: each finished document is appended to a JSON Lines
   file, and a re-run skips the documents already in it, so a multi-hour run on a
   Raspberry Pi survives a reboot. The file records the model and policy and is

@@ -42,6 +42,7 @@ from . import __version__
 from .audit import audit
 from .backends import Backend, BackendError
 from .prompts import DEFAULT_POLICY, PROMPT_STYLES
+from .schema import Policy
 from .serialize import audit_dict, verdict_dict
 from .triage import TriageError, triage
 
@@ -104,8 +105,10 @@ class AuditService:
         default_prompt: str = "plain",
         max_queue: int = DEFAULT_MAX_QUEUE,
         keep: int = DEFAULT_KEEP,
+        policy: Policy = DEFAULT_POLICY,
     ) -> None:
         self.backend = backend
+        self.policy = policy
         self.model = model
         self.default_prompt = default_prompt
         self.max_queue = max_queue
@@ -200,7 +203,8 @@ class AuditService:
             result, error = None, None
             try:
                 result = self._execute(job)
-            except (BackendError, TriageError) as exc:
+            except (BackendError, TriageError, ValueError) as exc:
+                # ValueError: a prompt style this task can't use (few-shot on custom labels).
                 error = str(exc)
             except Exception:  # keep the worker alive whatever a job does
                 traceback.print_exc(file=sys.stderr)
@@ -212,11 +216,7 @@ class AuditService:
                 job.document = ""  # don't keep the submitted text around longer than needed
 
     def _execute(self, job: Job) -> dict:
-        policy = (
-            DEFAULT_POLICY
-            if job.prompt == "plain"
-            else replace(DEFAULT_POLICY, prompt_style=job.prompt)
-        )
+        policy = replace(self.policy, prompt_style=job.prompt)
         if job.verb == "triage":
             return verdict_dict(triage(job.document, self.backend, policy))
         return audit_dict(audit(job.document, self.backend, policy))
@@ -306,6 +306,7 @@ class _Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "version": __version__,
                     "model": self.service.model,
+                    "labels": list(self.service.policy.labels),
                     "backend_reachable": _backend_reachable(self.service.backend),
                     "queue": self.service.queue_length(),
                     "auth": bool(self.token),
